@@ -1,0 +1,97 @@
+'use client'
+import { useEffect } from 'react'
+
+// Approximate Line of Control coordinates (India's claimed boundary)
+// Running N→S from Siachen area down to the international border
+const LOC_COORDS: [number, number][] = [
+  [36.8, 76.8],  // Siachen / AGPL north
+  [36.2, 77.1],
+  [35.9, 76.9],
+  [35.6, 76.6],  // Saltoro Ridge
+  [35.3, 76.2],
+  [35.1, 75.9],  // near Skardu
+  [34.8, 75.4],
+  [34.5, 74.8],  // Kargil sector
+  [34.1, 74.4],
+  [33.8, 74.2],  // Uri sector
+  [33.4, 74.0],
+  [33.1, 73.9],
+  [32.7, 74.0],  // Poonch / Rajouri
+  [32.5, 74.1],  // meets international border near Sialkot
+]
+
+// Custom label positions
+const LABELS = [
+  {
+    lat: 34.0,
+    lng: 73.5,
+    text: 'POK',
+    subtext: '(Pak. Occupied Kashmir)',
+    color: '#f97316',
+  },
+  {
+    lat: 36.0,
+    lng: 74.3,
+    text: 'GILGIT-BALTISTAN',
+    subtext: '(Pak. Occupied Territory)',
+    color: '#f97316',
+  },
+  {
+    lat: 33.8,
+    lng: 76.2,
+    text: 'JAMMU & KASHMIR',
+    subtext: '(India)',
+    color: '#00e5ff',
+  },
+]
+
+interface IndiaOverlayProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  map: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Leaflet: any
+}
+
+export function addIndiaOverlay({ map, Leaflet }: IndiaOverlayProps) {
+  // Draw Line of Control as dashed neon line
+  Leaflet.polyline(LOC_COORDS, {
+    color: '#00e5ff',
+    weight: 1.5,
+    opacity: 0.7,
+    dashArray: '6, 5',
+    lineJoin: 'round',
+  }).addTo(map).bindTooltip('Line of Control (India\'s claimed boundary)', {
+    permanent: false,
+    direction: 'top',
+    className: 'loc-tooltip',
+  })
+
+  // Add custom text labels
+  LABELS.forEach(({ lat, lng, text, subtext, color }) => {
+    const el = document.createElement('div')
+    el.style.cssText = `
+      display: flex; flex-direction: column; align-items: center;
+      pointer-events: none; user-select: none;
+    `
+    el.innerHTML = `
+      <span style="
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700; font-size: 8px;
+        letter-spacing: .1em; color: ${color};
+        text-shadow: 0 0 8px ${color}80;
+        white-space: nowrap; line-height: 1.3;
+      ">${text}</span>
+      <span style="
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 7px; color: rgba(255,255,255,.4);
+        white-space: nowrap; letter-spacing: .06em;
+      ">${subtext}</span>
+    `
+    const icon = Leaflet.divIcon({
+      html: el,
+      className: '',
+      iconAnchor: [0, 0],
+    })
+    Leaflet.marker([lat, lng], { icon, interactive: false, zIndexOffset: 1000 }).addTo(map)
+  })
+}

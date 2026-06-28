@@ -143,6 +143,11 @@ export default function WorldMap() {
         Leaflet.marker([country.lat, country.lng], { icon }).addTo(map)
       })
 
+      // India overlay — correct borders + labels
+      import('@/components/IndiaOverlay').then(({ addIndiaOverlay }) => {
+        addIndiaOverlay({ map, Leaflet })
+      })
+
       // Load live colours after map is ready
       setTimeout(() => updateBubbleColors(), 1000)
 

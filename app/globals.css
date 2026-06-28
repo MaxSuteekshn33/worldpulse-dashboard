@@ -52,3 +52,15 @@ html, body { height: 100%; background: #000; color: #fff; overflow: hidden; }
   to   { transform: translateY(0); }
 }
 .drawer-enter { animation: slideUp .28s cubic-bezier(.2,.8,.2,1) forwards; }
+
+/* LOC tooltip */
+.loc-tooltip {
+  background: rgba(0,0,0,.85) !important;
+  border: 1px solid rgba(0,229,255,.3) !important;
+  color: #00e5ff !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 9px !important;
+  letter-spacing: .08em !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
