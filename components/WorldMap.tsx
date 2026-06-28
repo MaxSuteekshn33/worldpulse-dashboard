@@ -40,23 +40,23 @@ export default function WorldMap() {
       // Add pulse bubble markers for each country
       COUNTRIES.forEach(country => {
         const el = document.createElement('div')
-        el.style.cssText = 'width:16px;height:16px;position:relative;cursor:pointer;'
+        el.style.cssText = 'width:32px;height:32px;position:relative;cursor:pointer;'
 
         const ring = document.createElement('div')
         ring.className = 'bubble-ring'
         ring.style.cssText = `
-          width:16px;height:16px;border-radius:50%;
+          width:32px;height:32px;border-radius:50%;
           border:1.5px solid #00e5ff;
           position:absolute;top:0;left:0;
         `
 
         const dot = document.createElement('div')
         dot.style.cssText = `
-          width:7px;height:7px;border-radius:50%;
+          width:10px;height:10px;border-radius:50%;
           background:#00e5ff;
           position:absolute;top:50%;left:50%;
           transform:translate(-50%,-50%);
-          box-shadow:0 0 8px #00e5ff;
+          box-shadow:0 0 10px #00e5ff;
           z-index:2;
         `
 
@@ -83,14 +83,11 @@ export default function WorldMap() {
           selectCountry(country.code)
         })
 
-        const icon = Leaflet.divIcon({ html: el, className: '', iconSize: [16, 16], iconAnchor: [8, 8] })
+        const icon = Leaflet.divIcon({ html: el, className: '', iconSize: [32, 32], iconAnchor: [16, 16] })
         Leaflet.marker([country.lat, country.lng], { icon }).addTo(map)
       })
 
-      // Click on map background closes drawer
-      map.on('click', () => {
-        useAppStore.getState().closeDrawer()
-      })
+      // Map background click — do nothing (use ✕ button to close drawer)
     })
 
     return () => {
