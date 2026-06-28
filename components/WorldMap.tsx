@@ -22,9 +22,11 @@ export default function WorldMap() {
         zoom: 2,
         zoomControl: false,
         attributionControl: false,
-        minZoom: 1.5,
+        minZoom: 2,
         maxZoom: 8,
         worldCopyJump: false,
+        maxBounds: [[-85, -180], [85, 180]],
+        maxBoundsViscosity: 1.0,
       })
       mapRef.current = map
 
@@ -32,6 +34,7 @@ export default function WorldMap() {
       Leaflet.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         subdomains: 'abcd',
         maxZoom: 19,
+        noWrap: true,
       }).addTo(map)
 
       // Zoom control (neon styled via CSS)
