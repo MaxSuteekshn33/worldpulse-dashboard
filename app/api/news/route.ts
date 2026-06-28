@@ -50,6 +50,24 @@ const COUNTRY_ALIASES: Record<string, string[]> = {
 }
 
 // ── Helpers ────────────────────────────────────────────────────
+function decodeHtml(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
+    .replace(/&#8220;/g, '"')
+    .replace(/&#8221;/g, '"')
+    .replace(/&#8211;/g, '–')
+    .replace(/&#8212;/g, '—')
+    .replace(/&#038;/g, '&')
+    .replace(/&#\d+;/g, '')   // strip any remaining numeric entities
+    .replace(/&[a-z]+;/g, '') // strip any remaining named entities
+    .trim()
+}
+
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60000)
@@ -95,8 +113,8 @@ async function fetchRSS(url: string, source: string, countryCode: string) {
       .slice(0, 5)
       .map((item: RSSItem, i: number) => ({
         id: `${source}-${i}-${Date.now()}`,
-        headline: item.title || '',
-        description: String(item.description || '').replace(/<[^>]+>/g, '').slice(0, 120),
+        headline: decodeHtml(item.title || ''),
+        description: decodeHtml(String(item.description || '').replace(/<[^>]+>/g, '')).slice(0, 120),
         source,
         url: item.link || '#',
         publishedAt: item.pubDate || '',
