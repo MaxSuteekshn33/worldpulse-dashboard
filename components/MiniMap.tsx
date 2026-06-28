@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef } from 'react'
-import { Loader } from '@googlemaps/js-api-loader'
+import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
 import { COUNTRIES } from '@/lib/countries'
 
 const COLORS = ['#3b82f6', '#f97316', '#22c55e']
@@ -28,9 +28,7 @@ export default function MiniMap() {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ''
     if (!apiKey) return
 
-    const loader = new Loader({ apiKey, version: 'weekly', region: 'IN', language: 'en' })
-
-    loader.load().then(() => {
+    loadGoogleMaps(apiKey).then(() => {
       if (!ref.current) return
 
       const map = new google.maps.Map(ref.current, {

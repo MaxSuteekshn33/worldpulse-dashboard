@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef } from 'react'
-import { Loader } from '@googlemaps/js-api-loader'
+import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
 import { useAppStore } from '@/lib/store'
 import { COUNTRIES } from '@/lib/countries'
 
@@ -75,20 +75,9 @@ export default function WorldMap() {
     if (!mapContainer.current || mapRef.current) return
 
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ''
-    if (!apiKey) {
-      console.error('Missing NEXT_PUBLIC_GOOGLE_MAPS_KEY')
-      return
-    }
+    if (!apiKey) { console.error('Missing NEXT_PUBLIC_GOOGLE_MAPS_KEY'); return }
 
-    const loader = new Loader({
-      apiKey,
-      version: 'weekly',
-      libraries: ['marker'],
-      region: 'IN', // Forces India's border view
-      language: 'en',
-    })
-
-    loader.load().then(() => {
+    loadGoogleMaps(apiKey).then(() => {
       if (!mapContainer.current) return
 
       const map = new google.maps.Map(mapContainer.current, {
