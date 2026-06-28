@@ -22,7 +22,7 @@ export default function NewsDrawer() {
 
   return (
     <div className="drawer-enter" style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 10000,
       height: '172px',
       background: 'rgba(4,4,12,.96)',
       borderTop: '1px solid rgba(0,229,255,.22)',
