@@ -8,10 +8,10 @@ const SEGMENTS: { key: Segment; label: string }[] = [
   { key: 'finance',     label: 'FIN' },
 ]
 
-const SOURCE_COLORS: Record<string, string> = {
-  'CNN':            '#cc0000',
-  'Sky News':       '#0057b8',
-  'Indian Express': '#ff6600',
+const SEGMENT_COLORS: Record<string, string> = {
+  'headline':    '#3b82f6', // blue
+  'geopolitics': '#f97316', // orange
+  'finance':     '#22c55e', // green
 }
 
 export default function NewsDrawer() {
@@ -50,9 +50,9 @@ export default function NewsDrawer() {
               fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
               fontSize: '9px', letterSpacing: '.12em',
               padding: '5px 10px', borderRadius: '4px', cursor: 'pointer',
-              border: selectedSegment === s.key ? '1px solid rgba(0,229,255,.6)' : '1px solid rgba(255,255,255,.12)',
-              background: selectedSegment === s.key ? 'rgba(0,229,255,.12)' : 'transparent',
-              color: selectedSegment === s.key ? '#00e5ff' : 'rgba(255,255,255,.45)',
+              border: selectedSegment === s.key ? `1px solid ${SEGMENT_COLORS[s.key]}` : '1px solid rgba(255,255,255,.12)',
+              background: selectedSegment === s.key ? `${SEGMENT_COLORS[s.key]}22` : 'transparent',
+              color: selectedSegment === s.key ? SEGMENT_COLORS[s.key] : 'rgba(255,255,255,.45)',
               transition: 'all .15s',
             }}>
               {s.label}
@@ -107,7 +107,8 @@ export default function NewsDrawer() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{
                   width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
-                  background: SOURCE_COLORS[article.source] || 'rgba(255,255,255,.4)',
+                  background: SEGMENT_COLORS[selectedSegment] || '#3b82f6',
+                  boxShadow: `0 0 5px ${SEGMENT_COLORS[selectedSegment] || '#3b82f6'}`,
                 }} />
                 <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', letterSpacing: '.1em', color: 'rgba(255,255,255,.4)', textTransform: 'uppercase' }}>
                   {article.source} · {article.timeAgo}

@@ -120,38 +120,13 @@ export async function GET(req: NextRequest) {
   )
   const articles = results.flat().slice(0, 10)
 
-  // If no country-specific results, return top headlines without filtering
+  // If no country-specific results — return empty, don't show other countries' news
   if (articles.length === 0) {
-    const fallbackResults = await Promise.all(
-      feeds.map(async f => {
-        try {
-          const res = await fetch(f.url, {
-            next: { revalidate: 300 },
-            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsBot/1.0)' },
-          })
-          if (!res.ok) return []
-          const xml = await res.text()
-          const parser = new XMLParser({ ignoreAttributes: false })
-          const parsed = parser.parse(xml)
-          const items: RSSItem[] = parsed?.rss?.channel?.item || []
-          return items.slice(0, 3).map((item: RSSItem, i: number) => ({
-            id: `${f.source}-fb-${i}`,
-            headline: item.title || '',
-            description: String(item.description || '').replace(/<[^>]+>/g, '').slice(0, 120),
-            source: f.source,
-            url: item.link || '#',
-            publishedAt: item.pubDate || '',
-            timeAgo: timeAgo(item.pubDate || ''),
-          }))
-        } catch { return [] }
-      })
-    )
-    const fallback = fallbackResults.flat().slice(0, 9)
     return NextResponse.json({
       country, segment,
-      articles: fallback,
-      note: 'showing global headlines — no country-specific results found',
-      total: fallback.length,
+      articles: [],
+      note: 'no country-specific news found',
+      total: 0,
       fetchedAt: new Date().toISOString(),
     })
   }
