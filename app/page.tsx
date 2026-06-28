@@ -136,7 +136,7 @@ export default function Landing() {
           {/* Sub hint */}
           <div style={{
             fontFamily: 'JetBrains Mono, monospace', fontSize: '9px',
-            color: 'rgba(255,255,255,.2)', letterSpacing: '.1em',
+            color: '#fff', fontWeight: 700, letterSpacing: '.1em',
           }}>
             SELECT ANY COUNTRY ON THE MAP TO READ THE NEWS
           </div>
