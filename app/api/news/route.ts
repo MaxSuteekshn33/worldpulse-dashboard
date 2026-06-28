@@ -1,86 +1,164 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { XMLParser } from 'fast-xml-parser'
 
-const NEWSAPI_KEY = process.env.NEWSAPI_KEY || ''
-
-const SEGMENT_CATEGORY: Record<string, string> = {
-  headline:    'general',
-  geopolitics: 'general',
-  finance:     'business',
+// ── RSS Feed URLs ──────────────────────────────────────────────
+const RSS_FEEDS = {
+  headline: [
+    { url: 'https://rss.cnn.com/rss/edition.rss',                  source: 'CNN' },
+    { url: 'https://feeds.skynews.com/feeds/rss/home.xml',          source: 'Sky News' },
+    { url: 'https://indianexpress.com/feed/',                       source: 'Indian Express' },
+  ],
+  geopolitics: [
+    { url: 'https://rss.cnn.com/rss/edition_world.rss',             source: 'CNN' },
+    { url: 'https://feeds.skynews.com/feeds/rss/world.xml',         source: 'Sky News' },
+    { url: 'https://indianexpress.com/section/world/feed/',         source: 'Indian Express' },
+  ],
+  finance: [
+    { url: 'https://rss.cnn.com/rss/money_news_international.rss',  source: 'CNN' },
+    { url: 'https://feeds.skynews.com/feeds/rss/business.xml',      source: 'Sky News' },
+    { url: 'https://indianexpress.com/section/business/feed/',      source: 'Indian Express' },
+  ],
 }
 
-const SEGMENT_KEYWORDS: Record<string, string> = {
-  geopolitics: 'politics OR diplomacy OR war OR conflict OR sanctions OR election',
-  finance:     '',
-  headline:    '',
+// ── Country name aliases for filtering ────────────────────────
+const COUNTRY_ALIASES: Record<string, string[]> = {
+  IN: ['India', 'Indian', 'New Delhi', 'Mumbai', 'Modi'],
+  US: ['United States', 'America', 'American', 'Washington', 'Biden', 'Trump', 'U.S.'],
+  GB: ['Britain', 'British', 'UK', 'United Kingdom', 'London', 'England'],
+  AU: ['Australia', 'Australian', 'Sydney', 'Melbourne', 'Canberra'],
+  CN: ['China', 'Chinese', 'Beijing', 'Xi Jinping'],
+  RU: ['Russia', 'Russian', 'Moscow', 'Putin', 'Kremlin'],
+  DE: ['Germany', 'German', 'Berlin'],
+  FR: ['France', 'French', 'Paris'],
+  JP: ['Japan', 'Japanese', 'Tokyo'],
+  BR: ['Brazil', 'Brazilian', 'Brasilia'],
+  CA: ['Canada', 'Canadian', 'Ottawa', 'Toronto'],
+  ZA: ['South Africa', 'South African', 'Johannesburg'],
+  NG: ['Nigeria', 'Nigerian', 'Lagos', 'Abuja'],
+  MX: ['Mexico', 'Mexican'],
+  AR: ['Argentina', 'Argentine', 'Buenos Aires'],
+  EG: ['Egypt', 'Egyptian', 'Cairo'],
+  IL: ['Israel', 'Israeli', 'Gaza', 'Tel Aviv', 'Jerusalem'],
+  SA: ['Saudi Arabia', 'Saudi', 'Riyadh'],
+  PK: ['Pakistan', 'Pakistani', 'Islamabad', 'Karachi'],
+  KR: ['South Korea', 'Korean', 'Seoul'],
+  IT: ['Italy', 'Italian', 'Rome'],
+  UA: ['Ukraine', 'Ukrainian', 'Kyiv', 'Zelensky'],
+  TR: ['Turkey', 'Turkish', 'Ankara', 'Erdogan', 'Türkiye'],
+  ID: ['Indonesia', 'Indonesian', 'Jakarta'],
+  NL: ['Netherlands', 'Dutch', 'Amsterdam'],
 }
 
+// ── Helpers ────────────────────────────────────────────────────
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60000)
+  if (mins < 1)  return 'just now'
   if (mins < 60) return `${mins}m ago`
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
+  if (hrs < 24)  return `${hrs}h ago`
   return `${Math.floor(hrs / 24)}d ago`
 }
 
+function matchesCountry(text: string, countryCode: string): boolean {
+  const aliases = COUNTRY_ALIASES[countryCode.toUpperCase()] || []
+  const lower = text.toLowerCase()
+  return aliases.some(alias => lower.includes(alias.toLowerCase()))
+}
+
+interface RSSItem {
+  title?: string
+  description?: string
+  link?: string
+  pubDate?: string
+  'media:content'?: unknown
+}
+
+async function fetchRSS(url: string, source: string, countryCode: string) {
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 300 },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsBot/1.0)' },
+    })
+    if (!res.ok) return []
+
+    const xml = await res.text()
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
+    const parsed = parser.parse(xml)
+    const items: RSSItem[] = parsed?.rss?.channel?.item || parsed?.feed?.entry || []
+
+    return items
+      .filter((item: RSSItem) => {
+        const text = `${item.title || ''} ${item.description || ''}`
+        return matchesCountry(text, countryCode)
+      })
+      .slice(0, 5)
+      .map((item: RSSItem, i: number) => ({
+        id: `${source}-${i}-${Date.now()}`,
+        headline: item.title || '',
+        description: String(item.description || '').replace(/<[^>]+>/g, '').slice(0, 120),
+        source,
+        url: item.link || '#',
+        publishedAt: item.pubDate || '',
+        timeAgo: timeAgo(item.pubDate || ''),
+      }))
+  } catch {
+    return []
+  }
+}
+
+// ── Route handler ──────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const country = searchParams.get('country')?.toLowerCase() || 'us'
-  const segment = (searchParams.get('segment') || 'headline') as string
+  const country  = (searchParams.get('country') || 'US').toUpperCase()
+  const segment  = (searchParams.get('segment') || 'headline') as keyof typeof RSS_FEEDS
+  const feeds    = RSS_FEEDS[segment] || RSS_FEEDS.headline
 
-  if (!NEWSAPI_KEY) {
-    // Return mock data when no API key is set
+  // Fetch all feeds in parallel
+  const results = await Promise.all(
+    feeds.map(f => fetchRSS(f.url, f.source, country))
+  )
+  const articles = results.flat().slice(0, 10)
+
+  // If no country-specific results, return top headlines without filtering
+  if (articles.length === 0) {
+    const fallbackResults = await Promise.all(
+      feeds.map(async f => {
+        try {
+          const res = await fetch(f.url, {
+            next: { revalidate: 300 },
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsBot/1.0)' },
+          })
+          if (!res.ok) return []
+          const xml = await res.text()
+          const parser = new XMLParser({ ignoreAttributes: false })
+          const parsed = parser.parse(xml)
+          const items: RSSItem[] = parsed?.rss?.channel?.item || []
+          return items.slice(0, 3).map((item: RSSItem, i: number) => ({
+            id: `${f.source}-fb-${i}`,
+            headline: item.title || '',
+            description: String(item.description || '').replace(/<[^>]+>/g, '').slice(0, 120),
+            source: f.source,
+            url: item.link || '#',
+            publishedAt: item.pubDate || '',
+            timeAgo: timeAgo(item.pubDate || ''),
+          }))
+        } catch { return [] }
+      })
+    )
+    const fallback = fallbackResults.flat().slice(0, 9)
     return NextResponse.json({
-      country,
-      segment,
-      articles: MOCK_ARTICLES.map((a, i) => ({ ...a, id: `mock-${i}`, segment, country })),
-      total: MOCK_ARTICLES.length,
+      country, segment,
+      articles: fallback,
+      note: 'showing global headlines — no country-specific results found',
+      total: fallback.length,
       fetchedAt: new Date().toISOString(),
     })
   }
 
-  const category = SEGMENT_CATEGORY[segment] || 'general'
-  const keywords = SEGMENT_KEYWORDS[segment] || ''
-
-  const params = new URLSearchParams({
-    country,
-    category,
-    pageSize: '8',
-    apiKey: NEWSAPI_KEY,
+  return NextResponse.json({
+    country, segment, articles,
+    total: articles.length,
+    fetchedAt: new Date().toISOString(),
   })
-  if (keywords) params.set('q', keywords)
-
-  try {
-    const res = await fetch(`https://newsapi.org/v2/top-headlines?${params}`, {
-      next: { revalidate: 300 }, // cache 5 min
-    })
-    const data = await res.json()
-
-    if (data.status !== 'ok') {
-      return NextResponse.json({ error: data.message }, { status: 502 })
-    }
-
-    const articles = (data.articles || []).map((a: Record<string, string>, i: number) => ({
-      id: `${country}-${segment}-${i}`,
-      headline: a.title || '',
-      description: a.description || '',
-      source: a.source?.name || 'Unknown',
-      url: a.url || '',
-      publishedAt: a.publishedAt || '',
-      timeAgo: timeAgo(a.publishedAt || ''),
-      segment,
-      country,
-    }))
-
-    return NextResponse.json({ country, segment, articles, total: articles.length, fetchedAt: new Date().toISOString() })
-  } catch {
-    return NextResponse.json({ error: 'Network error' }, { status: 500 })
-  }
 }
-
-const MOCK_ARTICLES = [
-  { headline: 'Global leaders meet for emergency climate summit', description: 'Representatives from 50 nations gather to discuss binding emissions targets.', source: 'CNN', url: '#', publishedAt: new Date(Date.now() - 3600000).toISOString(), timeAgo: '1h ago' },
-  { headline: 'Markets react as central banks signal rate cuts', description: 'Stock indices rose sharply following signals from the Fed and ECB.', source: 'Sky News', url: '#', publishedAt: new Date(Date.now() - 7200000).toISOString(), timeAgo: '2h ago' },
-  { headline: 'Diplomatic tensions rise over trade negotiations', description: 'Officials warn that trade talks have stalled as both sides dig in.', source: 'Indian Express', url: '#', publishedAt: new Date(Date.now() - 10800000).toISOString(), timeAgo: '3h ago' },
-  { headline: 'Tech sector sees record investment in Q2', description: 'Venture capital poured $180 billion into startups globally this quarter.', source: 'CNN', url: '#', publishedAt: new Date(Date.now() - 14400000).toISOString(), timeAgo: '4h ago' },
-]
