@@ -1,20 +1,37 @@
 'use client'
 import { useEffect, useRef } from 'react'
+import { Loader } from '@googlemaps/js-api-loader'
 import { useAppStore } from '@/lib/store'
 import { COUNTRIES } from '@/lib/countries'
 
-// Segment colours
 const SEGMENT_COLOR = {
-  headline:    '#3b82f6', // blue
-  geopolitics: '#f97316', // orange
-  finance:     '#22c55e', // green
-  default:     '#3b82f6', // blue fallback
+  headline:    '#3b82f6',
+  geopolitics: '#f97316',
+  finance:     '#22c55e',
+  default:     '#3b82f6',
 }
 
-// Fetch which segment has latest news for a country
+// Google Maps dark cyberpunk style
+const DARK_STYLE: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#0a0a0f' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0a0a0f' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#4a4a6a' }] },
+  { featureType: 'country', elementType: 'geometry.stroke', stylers: [{ color: '#2a2a4a' }, { weight: 0.8 }] },
+  { featureType: 'administrative.country', elementType: 'geometry.stroke', stylers: [{ color: '#334155' }, { weight: 0.8 }] },
+  { featureType: 'administrative.country', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] },
+  { featureType: 'administrative.province', elementType: 'geometry.stroke', stylers: [{ color: '#1e1e2e' }] },
+  { featureType: 'administrative.province', elementType: 'labels.text.fill', stylers: [{ color: '#3a3a5a' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#050508' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#1a1a3a' }] },
+  { featureType: 'road', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#0d0d18' }] },
+  { featureType: 'administrative.locality', stylers: [{ visibility: 'off' }] },
+]
+
 async function fetchBubbleColor(countryCode: string): Promise<string> {
   try {
-    // Try geopolitics first, then finance, then headline
     const segments = ['geopolitics', 'finance', 'headline'] as const
     const results = await Promise.all(
       segments.map(seg =>
@@ -24,7 +41,6 @@ async function fetchBubbleColor(countryCode: string): Promise<string> {
           .catch(() => ({ seg, count: 0 }))
       )
     )
-    // Pick segment with most articles
     const top = results.sort((a, b) => b.count - a.count)[0]
     if (top.count === 0) return SEGMENT_COLOR.default
     return SEGMENT_COLOR[top.seg]
@@ -35,15 +51,15 @@ async function fetchBubbleColor(countryCode: string): Promise<string> {
 
 export default function WorldMap() {
   const mapContainer = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<unknown>(null)
+  const mapRef = useRef<google.maps.Map | null>(null)
   const markerColorsRef = useRef<Map<string, { dot: HTMLElement; ring: HTMLElement }>>(new Map())
   const { selectCountry, drawerOpen } = useAppStore()
 
-  // Update bubble colours from live RSS
   const updateBubbleColors = async () => {
-    // Fetch in batches of 5 to avoid hammering RSS feeds
-    const batch = async (codes: string[]) => {
-      for (const code of codes) {
+    const codes = COUNTRIES.map(c => c.code)
+    for (let i = 0; i < codes.length; i += 5) {
+      const batch = codes.slice(i, i + 5)
+      await Promise.all(batch.map(async code => {
         const color = await fetchBubbleColor(code)
         const els = markerColorsRef.current.get(code)
         if (els) {
@@ -51,44 +67,48 @@ export default function WorldMap() {
           els.dot.style.boxShadow = `0 0 10px ${color}`
           els.ring.style.borderColor = color
         }
-      }
-    }
-    // Split 25 countries into 5 batches of 5
-    const codes = COUNTRIES.map(c => c.code)
-    for (let i = 0; i < codes.length; i += 5) {
-      await batch(codes.slice(i, i + 5))
+      }))
     }
   }
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return
-    if ((mapContainer.current as HTMLElement & { _leaflet_id?: number })._leaflet_id) return
 
-    import('leaflet').then((L) => {
-      const Leaflet = L.default
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ''
+    if (!apiKey) {
+      console.error('Missing NEXT_PUBLIC_GOOGLE_MAPS_KEY')
+      return
+    }
 
-      const map = Leaflet.map(mapContainer.current!, {
-        center: [20, 10],
-        zoom: 2,
-        zoomControl: false,
-        attributionControl: false,
+    const loader = new Loader({
+      apiKey,
+      version: 'weekly',
+      libraries: ['marker'],
+      region: 'IN', // Forces India's border view
+      language: 'en',
+    })
+
+    loader.load().then(() => {
+      if (!mapContainer.current) return
+
+      const map = new google.maps.Map(mapContainer.current, {
+        center: { lat: 20, lng: 10 },
+        zoom: 2.5,
         minZoom: 2,
-        maxZoom: 8,
-        worldCopyJump: false,
-        maxBounds: [[-85, -180], [85, 180]],
-        maxBoundsViscosity: 1.0,
+        maxZoom: 10,
+        styles: DARK_STYLE,
+        disableDefaultUI: true,
+        zoomControl: true,
+        zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
+        gestureHandling: 'greedy',
+        restriction: {
+          latLngBounds: { north: 85, south: -85, west: -180, east: 180 },
+          strictBounds: true,
+        },
       })
       mapRef.current = map
 
-      Leaflet.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        maxZoom: 19,
-        noWrap: true,
-      }).addTo(map)
-
-      Leaflet.control.zoom({ position: 'bottomright' }).addTo(map)
-
-      // Add bubble markers — start blue, update to live colour after
+      // Add pulse bubble markers
       COUNTRIES.forEach(country => {
         const el = document.createElement('div')
         el.style.cssText = 'width:32px;height:32px;position:relative;cursor:pointer;'
@@ -99,9 +119,8 @@ export default function WorldMap() {
           width:32px;height:32px;border-radius:50%;
           border:1.5px solid ${SEGMENT_COLOR.default};
           position:absolute;top:0;left:0;
-          transition: border-color .6s ease;
+          transition:border-color .6s ease;
         `
-
         const dot = document.createElement('div')
         dot.style.cssText = `
           width:10px;height:10px;border-radius:50%;
@@ -110,10 +129,8 @@ export default function WorldMap() {
           transform:translate(-50%,-50%);
           box-shadow:0 0 10px ${SEGMENT_COLOR.default};
           z-index:2;
-          transition: background .6s ease, box-shadow .6s ease;
+          transition:background .6s ease,box-shadow .6s ease;
         `
-
-        // Tooltip — shows country name + colour legend
         const tooltip = document.createElement('div')
         tooltip.style.cssText = `
           position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
@@ -129,7 +146,6 @@ export default function WorldMap() {
         el.appendChild(dot)
         el.appendChild(tooltip)
 
-        // Store refs for colour updates
         markerColorsRef.current.set(country.code, { dot, ring })
 
         el.addEventListener('mouseenter', () => { tooltip.style.display = 'block' })
@@ -139,41 +155,56 @@ export default function WorldMap() {
           selectCountry(country.code)
         })
 
-        const icon = Leaflet.divIcon({ html: el, className: '', iconSize: [32, 32], iconAnchor: [16, 16] })
-        Leaflet.marker([country.lat, country.lng], { icon }).addTo(map)
+        new google.maps.OverlayView()
+
+        // Use OverlayView to place HTML element on map
+        const overlay = new google.maps.OverlayView()
+        overlay.onAdd = function () {
+          const pane = this.getPanes()?.overlayMouseTarget
+          pane?.appendChild(el)
+        }
+        overlay.draw = function () {
+          const proj = this.getProjection()
+          if (!proj) return
+          const pos = proj.fromLatLngToDivPixel(
+            new google.maps.LatLng(country.lat, country.lng)
+          )
+          if (pos) {
+            el.style.position = 'absolute'
+            el.style.left = `${pos.x - 16}px`
+            el.style.top = `${pos.y - 16}px`
+          }
+        }
+        overlay.onRemove = function () {
+          el.parentNode?.removeChild(el)
+        }
+        overlay.setMap(map)
       })
 
-      // India overlay — correct borders + labels
-      import('@/components/IndiaOverlay').then(({ addIndiaOverlay }) => {
-        addIndiaOverlay({ map, Leaflet })
+      // India overlay labels
+      import('@/components/IndiaOverlay').then(({ addIndiaOverlayGoogle }) => {
+        addIndiaOverlayGoogle({ map })
       })
 
-      // Load live colours after map is ready
+      // Load live colours
       setTimeout(() => updateBubbleColors(), 1000)
-
-      // Refresh every 5 minutes
       const interval = setInterval(() => updateBubbleColors(), 5 * 60 * 1000)
-
-      // Store interval for cleanup
       ;(map as unknown as { _colorInterval: ReturnType<typeof setInterval> })._colorInterval = interval
     })
 
     return () => {
       if (mapRef.current) {
-        const m = mapRef.current as { remove: () => void; _colorInterval?: ReturnType<typeof setInterval> }
+        const m = mapRef.current as unknown as { _colorInterval?: ReturnType<typeof setInterval> }
         if (m._colorInterval) clearInterval(m._colorInterval)
-        m.remove()
         mapRef.current = null
       }
     }
   }, [selectCountry])
 
   useEffect(() => {
-    setTimeout(() => {
-      if (mapRef.current) {
-        ;(mapRef.current as { invalidateSize: () => void }).invalidateSize()
-      }
-    }, 320)
+    if (mapRef.current) {
+      setTimeout(() => google.maps.event.trigger(mapRef.current!, 'resize'), 320)
+    }
   }, [drawerOpen])
 
   return (

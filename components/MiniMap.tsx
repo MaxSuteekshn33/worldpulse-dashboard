@@ -1,46 +1,57 @@
 'use client'
 import { useEffect, useRef } from 'react'
+import { Loader } from '@googlemaps/js-api-loader'
 import { COUNTRIES } from '@/lib/countries'
 
 const COLORS = ['#3b82f6', '#f97316', '#22c55e']
 
+const DARK_STYLE: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#0a0a0f' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0a0a0f' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#3a3a5a' }] },
+  { featureType: 'administrative.country', elementType: 'geometry.stroke', stylers: [{ color: '#2a2a4a' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#050508' }] },
+  { featureType: 'road', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#0d0d18' }] },
+  { featureType: 'administrative.locality', stylers: [{ visibility: 'off' }] },
+]
+
 export default function MiniMap() {
   const ref = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<unknown>(null)
+  const mapRef = useRef<google.maps.Map | null>(null)
 
   useEffect(() => {
     if (!ref.current || mapRef.current) return
-    if ((ref.current as HTMLElement & { _leaflet_id?: number })._leaflet_id) return
 
-    import('leaflet').then((L) => {
-      const Leaflet = L.default
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ''
+    if (!apiKey) return
 
-      const map = Leaflet.map(ref.current!, {
-        center: [20, 10],
+    const loader = new Loader({ apiKey, version: 'weekly', region: 'IN', language: 'en' })
+
+    loader.load().then(() => {
+      if (!ref.current) return
+
+      const map = new google.maps.Map(ref.current, {
+        center: { lat: 20, lng: 10 },
         zoom: 1.5,
-        zoomControl: false,
-        attributionControl: false,
-        dragging: false,
-        scrollWheelZoom: false,
-        doubleClickZoom: false,
-        keyboard: false,
-        touchZoom: false,
-        maxBounds: [[-85, -180], [85, 180]],
-        maxBoundsViscosity: 1.0,
+        styles: DARK_STYLE,
+        disableDefaultUI: true,
+        gestureHandling: 'none',
+        keyboardShortcuts: false,
+        restriction: {
+          latLngBounds: { north: 85, south: -85, west: -180, east: 180 },
+          strictBounds: true,
+        },
       })
       mapRef.current = map
 
-      Leaflet.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        maxZoom: 19,
-        noWrap: true,
-      }).addTo(map)
-
-      // Add decorative pulse bubbles
+      // Add decorative bubbles
       COUNTRIES.forEach((country, i) => {
         const color = COLORS[i % COLORS.length]
         const el = document.createElement('div')
-        el.style.cssText = 'width:14px;height:14px;position:relative;'
+        el.style.cssText = 'width:14px;height:14px;position:relative;pointer-events:none;'
 
         const ring = document.createElement('div')
         ring.className = 'bubble-ring'
@@ -61,17 +72,26 @@ export default function MiniMap() {
         el.appendChild(ring)
         el.appendChild(dot)
 
-        const icon = Leaflet.divIcon({ html: el, className: '', iconSize: [14, 14], iconAnchor: [7, 7] })
-        Leaflet.marker([country.lat, country.lng], { icon }).addTo(map)
+        const overlay = new google.maps.OverlayView()
+        overlay.onAdd = function () {
+          this.getPanes()?.overlayLayer.appendChild(el)
+        }
+        overlay.draw = function () {
+          const proj = this.getProjection()
+          if (!proj) return
+          const pos = proj.fromLatLngToDivPixel(new google.maps.LatLng(country.lat, country.lng))
+          if (pos) {
+            el.style.position = 'absolute'
+            el.style.left = `${pos.x - 7}px`
+            el.style.top = `${pos.y - 7}px`
+          }
+        }
+        overlay.onRemove = function () { el.parentNode?.removeChild(el) }
+        overlay.setMap(map)
       })
     })
 
-    return () => {
-      if (mapRef.current) {
-        ;(mapRef.current as { remove: () => void }).remove()
-        mapRef.current = null
-      }
-    }
+    return () => { mapRef.current = null }
   }, [])
 
   return <div ref={ref} style={{ width: '100%', height: '100%', minHeight: '420px', background: '#0a0a0f' }} />

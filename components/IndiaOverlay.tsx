@@ -53,45 +53,66 @@ interface IndiaOverlayProps {
 }
 
 export function addIndiaOverlay({ map, Leaflet }: IndiaOverlayProps) {
-  // Draw Line of Control as dashed neon line
   Leaflet.polyline(LOC_COORDS, {
-    color: '#00e5ff',
-    weight: 1.5,
-    opacity: 0.7,
-    dashArray: '6, 5',
-    lineJoin: 'round',
-  }).addTo(map).bindTooltip('Line of Control (India\'s claimed boundary)', {
-    permanent: false,
-    direction: 'top',
-    className: 'loc-tooltip',
+    color: '#00e5ff', weight: 1.5, opacity: 0.7, dashArray: '6, 5', lineJoin: 'round',
+  }).addTo(map).bindTooltip("Line of Control (India's claimed boundary)", {
+    permanent: false, direction: 'top', className: 'loc-tooltip',
   })
 
-  // Add custom text labels
   LABELS.forEach(({ lat, lng, text, subtext, color }) => {
     const el = document.createElement('div')
-    el.style.cssText = `
-      display: flex; flex-direction: column; align-items: center;
-      pointer-events: none; user-select: none;
-    `
+    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;user-select:none;'
     el.innerHTML = `
-      <span style="
-        font-family: 'JetBrains Mono', monospace;
-        font-weight: 700; font-size: 8px;
-        letter-spacing: .1em; color: ${color};
-        text-shadow: 0 0 8px ${color}80;
-        white-space: nowrap; line-height: 1.3;
-      ">${text}</span>
-      <span style="
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 7px; color: rgba(255,255,255,.4);
-        white-space: nowrap; letter-spacing: .06em;
-      ">${subtext}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:8px;letter-spacing:.1em;color:${color};text-shadow:0 0 8px ${color}80;white-space:nowrap;">${text}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:7px;color:rgba(255,255,255,.4);white-space:nowrap;">${subtext}</span>
     `
-    const icon = Leaflet.divIcon({
-      html: el,
-      className: '',
-      iconAnchor: [0, 0],
-    })
+    const icon = Leaflet.divIcon({ html: el, className: '', iconAnchor: [0, 0] })
     Leaflet.marker([lat, lng], { icon, interactive: false, zIndexOffset: 1000 }).addTo(map)
+  })
+}
+
+// ── Google Maps version ──────────────────────────────────────
+export function addIndiaOverlayGoogle({ map }: { map: google.maps.Map }) {
+  // Dashed Line of Control
+  new google.maps.Polyline({
+    path: LOC_COORDS.map(([lat, lng]) => ({ lat, lng })),
+    geodesic: true,
+    strokeColor: '#00e5ff',
+    strokeOpacity: 0,
+    strokeWeight: 0,
+    icons: [{
+      icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.7, strokeColor: '#00e5ff', scale: 2 },
+      offset: '0',
+      repeat: '12px',
+    }],
+    map,
+  })
+
+  // Custom label overlays
+  LABELS.forEach(({ lat, lng, text, subtext, color }) => {
+    const el = document.createElement('div')
+    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:none;user-select:none;'
+    el.innerHTML = `
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:8px;letter-spacing:.1em;color:${color};text-shadow:0 0 8px ${color}80;white-space:nowrap;">${text}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:7px;color:rgba(255,255,255,.4);white-space:nowrap;">${subtext}</span>
+    `
+
+    const overlay = new google.maps.OverlayView()
+    overlay.onAdd = function () {
+      const pane = this.getPanes()?.overlayLayer
+      pane?.appendChild(el)
+    }
+    overlay.draw = function () {
+      const proj = this.getProjection()
+      if (!proj) return
+      const pos = proj.fromLatLngToDivPixel(new google.maps.LatLng(lat, lng))
+      if (pos) {
+        el.style.position = 'absolute'
+        el.style.left = `${pos.x}px`
+        el.style.top = `${pos.y}px`
+      }
+    }
+    overlay.onRemove = function () { el.parentNode?.removeChild(el) }
+    overlay.setMap(map)
   })
 }
