@@ -119,7 +119,32 @@ interface RSSItem {
   description?: string
   link?: string
   pubDate?: string
-  'media:content'?: unknown
+  enclosure?: { '@_url'?: string; '@_type'?: string }
+  'media:content'?: { '@_url'?: string } | { '@_url'?: string }[]
+  'media:thumbnail'?: { '@_url'?: string }
+  'content:encoded'?: string
+}
+
+function extractImage(item: RSSItem): string | undefined {
+  // media:content
+  const mc = item['media:content']
+  if (mc) {
+    if (Array.isArray(mc)) {
+      const img = mc.find(m => m['@_url'])
+      if (img?.['@_url']) return img['@_url']
+    } else if (mc['@_url']) return mc['@_url']
+  }
+  // media:thumbnail
+  if (item['media:thumbnail']?.['@_url']) return item['media:thumbnail']['@_url']
+  // enclosure
+  if (item.enclosure?.['@_url'] && item.enclosure?.['@_type']?.startsWith('image')) {
+    return item.enclosure['@_url']
+  }
+  // og image in content:encoded
+  const encoded = item['content:encoded'] || ''
+  const imgMatch = encoded.match(/<img[^>]+src=["']([^"']+)["']/i)
+  if (imgMatch?.[1]) return imgMatch[1]
+  return undefined
 }
 
 async function fetchRSS(url: string, source: string, countryCode: string) {
@@ -144,11 +169,12 @@ async function fetchRSS(url: string, source: string, countryCode: string) {
       .map((item: RSSItem, i: number) => ({
         id: `${source}-${i}-${Date.now()}`,
         headline: decodeHtml(item.title || ''),
-        description: decodeHtml(String(item.description || '').replace(/<[^>]+>/g, '')).slice(0, 120),
+        description: decodeHtml(String(item.description || '').replace(/<[^>]+>/g, '')).slice(0, 160),
         source,
         url: item.link || '#',
         publishedAt: item.pubDate || '',
         timeAgo: timeAgo(item.pubDate || ''),
+        imageUrl: extractImage(item),
       }))
   } catch {
     return []

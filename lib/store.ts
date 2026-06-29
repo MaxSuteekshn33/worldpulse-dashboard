@@ -12,6 +12,7 @@ export interface NewsArticle {
   timeAgo: string
   segment: Segment
   country: string
+  imageUrl?: string
 }
 
 export interface NewsBubble {
