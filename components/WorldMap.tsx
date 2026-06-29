@@ -43,10 +43,10 @@ async function fetchBubbleColor(countryCode: string): Promise<string> {
       )
     )
     const top = results.sort((a, b) => b.count - a.count)[0]
-    if (top.count === 0) return SEGMENT_COLOR.default
+    if (top.count === 0) return '#2a2a3a' // faint grey — no news found
     return SEGMENT_COLOR[top.seg]
   } catch {
-    return SEGMENT_COLOR.default
+    return '#2a2a3a'
   }
 }
 

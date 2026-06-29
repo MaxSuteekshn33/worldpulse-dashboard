@@ -52,6 +52,31 @@ const COUNTRY_ALIASES: Record<string, string[]> = {
   TR: ['Turkey', 'Turkish', 'Ankara', 'Erdogan', 'Türkiye'],
   ID: ['Indonesia', 'Indonesian', 'Jakarta'],
   NL: ['Netherlands', 'Dutch', 'Amsterdam'],
+  ES: ['Spain', 'Spanish', 'Madrid', 'Barcelona'],
+  SE: ['Sweden', 'Swedish', 'Stockholm'],
+  NO: ['Norway', 'Norwegian', 'Oslo'],
+  PL: ['Poland', 'Polish', 'Warsaw'],
+  CH: ['Switzerland', 'Swiss', 'Zurich', 'Geneva'],
+  BE: ['Belgium', 'Belgian', 'Brussels'],
+  PT: ['Portugal', 'Portuguese', 'Lisbon'],
+  GR: ['Greece', 'Greek', 'Athens'],
+  AE: ['UAE', 'United Arab Emirates', 'Dubai', 'Abu Dhabi'],
+  IR: ['Iran', 'Iranian', 'Tehran'],
+  IQ: ['Iraq', 'Iraqi', 'Baghdad'],
+  SG: ['Singapore', 'Singaporean'],
+  MY: ['Malaysia', 'Malaysian', 'Kuala Lumpur'],
+  TH: ['Thailand', 'Thai', 'Bangkok'],
+  PH: ['Philippines', 'Filipino', 'Manila'],
+  VN: ['Vietnam', 'Vietnamese', 'Hanoi', 'Ho Chi Minh'],
+  BD: ['Bangladesh', 'Bangladeshi', 'Dhaka'],
+  KE: ['Kenya', 'Kenyan', 'Nairobi'],
+  ET: ['Ethiopia', 'Ethiopian', 'Addis Ababa'],
+  GH: ['Ghana', 'Ghanaian', 'Accra'],
+  CO: ['Colombia', 'Colombian', 'Bogota'],
+  CL: ['Chile', 'Chilean', 'Santiago'],
+  AT: ['Austria', 'Austrian', 'Vienna'],
+  CZ: ['Czech', 'Czechia', 'Prague'],
+  HU: ['Hungary', 'Hungarian', 'Budapest'],
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -100,7 +125,7 @@ interface RSSItem {
 async function fetchRSS(url: string, source: string, countryCode: string) {
   try {
     const res = await fetch(url, {
-      next: { revalidate: 300 },
+      next: { revalidate: 1200 },
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NewsBot/1.0)' },
     })
     if (!res.ok) return []
