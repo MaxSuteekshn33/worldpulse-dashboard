@@ -116,8 +116,8 @@ export default function Landing() {
           50 COUNTRIES · CNN · SKY NEWS · INDIAN EXPRESS · UPDATES EVERY 20 MIN
         </p>
 
-        {/* ── BIG SEARCH CTA ── */}
-        <div style={{ position: 'relative', width: '100%', maxWidth: '480px' }}>
+        {/* ── BIG SEARCH CTA — moved to bottom centre, rendered below ── */}
+        <div style={{ display: 'none' }}>
           <div className="glass-neon" style={{
             display: 'flex', alignItems: 'center', gap: '12px',
             borderRadius: '12px', padding: '0 20px', height: '56px',
@@ -196,18 +196,93 @@ export default function Landing() {
         <MiniMap />
       </div>
 
-      {/* Bottom tagline */}
+      {/* ── BOTTOM CENTRE SEARCH CTA ── */}
       <div style={{
-        position: 'fixed', bottom: '28px', left: '50%', transform: 'translateX(-50%)',
-        zIndex: 20, textAlign: 'center',
+        position: 'fixed', bottom: '36px', left: '50%', transform: 'translateX(-50%)',
+        zIndex: 50, width: '100%', maxWidth: '520px', padding: '0 24px',
       }}>
-        <p style={{
-          fontFamily: 'JetBrains Mono, monospace', fontSize: '9px',
-          color: 'rgba(255,255,255,.2)', letterSpacing: '.16em',
-          fontWeight: 700,
-        }}>
-          CLICK ANY COUNTRY BUBBLE ON THE MAP · OR SEARCH ABOVE
-        </p>
+        <div style={{ position: 'relative' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '12px',
+            background: 'rgba(4,4,12,.92)',
+            border: '1.5px solid rgba(0,229,255,.5)',
+            borderRadius: '14px', padding: '0 20px', height: '58px',
+            boxShadow: '0 0 40px rgba(0,229,255,.2), 0 0 80px rgba(0,229,255,.08), 0 20px 60px rgba(0,0,0,.8)',
+            backdropFilter: 'blur(24px)',
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" strokeWidth="2.5">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+              value={query}
+              onChange={e => { setQuery(e.target.value); setOpen(true) }}
+              onFocus={() => setOpen(true)}
+              onBlur={() => setTimeout(() => setOpen(false), 160)}
+              placeholder="Search a country to start tracking…"
+              style={{
+                flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                fontFamily: 'JetBrains Mono, monospace', fontSize: '13px',
+                color: '#fff', letterSpacing: '.06em',
+              }}
+            />
+            <button
+              onClick={() => router.push('/dashboard')}
+              style={{
+                fontFamily: 'JetBrains Mono, monospace', fontWeight: 800,
+                fontSize: '10px', letterSpacing: '.14em',
+                color: '#0a0a0f', background: '#00e5ff',
+                border: 'none', borderRadius: '8px',
+                padding: '10px 18px', cursor: 'pointer',
+                whiteSpace: 'nowrap', transition: 'opacity .15s',
+                boxShadow: '0 0 20px rgba(0,229,255,.4)',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '.85')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+            >
+              OPEN MAP ▶
+            </button>
+          </div>
+
+          {/* Dropdown opens upward */}
+          {open && results.length > 0 && (
+            <div style={{
+              position: 'absolute', bottom: '64px', left: 0, right: 0,
+              background: 'rgba(4,4,12,.97)', border: '1px solid rgba(0,229,255,.2)',
+              borderRadius: '10px', overflow: 'hidden', zIndex: 9999,
+              boxShadow: '0 -8px 40px rgba(0,0,0,.7), 0 0 24px rgba(0,229,255,.08)',
+            }}>
+              {results.map(c => (
+                <div
+                  key={c.code}
+                  onMouseDown={() => pick(c.code)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    padding: '12px 20px', cursor: 'pointer',
+                    fontFamily: 'JetBrains Mono, monospace', fontSize: '11px',
+                    color: '#fff', letterSpacing: '.06em',
+                    borderBottom: '1px solid rgba(255,255,255,.05)',
+                    transition: 'background .15s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,.08)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ fontSize: '18px' }}>{c.flag}</span>
+                  <span>{c.name}</span>
+                  <span style={{ marginLeft: 'auto', color: 'rgba(0,229,255,.5)', fontSize: '9px' }}>VIEW NEWS →</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Hint text */}
+          <p style={{
+            textAlign: 'center', marginTop: '10px',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: '8px',
+            color: 'rgba(255,255,255,.2)', letterSpacing: '.14em', fontWeight: 700,
+          }}>
+            CLICK ANY COUNTRY BUBBLE ON THE MAP · OR SEARCH HERE
+          </p>
+        </div>
       </div>
 
     </main>
