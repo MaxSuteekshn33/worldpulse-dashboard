@@ -374,41 +374,7 @@ export default function NewsDrawer() {
       display: 'flex', flexDirection: 'column',
     }}>
 
-      {/* ── DRAG HANDLE ── */}
-      <div
-        onMouseDown={onDragStart}
-        style={{
-          flexShrink: 0, height: '36px', cursor: 'ns-resize',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(26,10,46,.05)',
-          borderBottom: '1px solid rgba(26,10,46,.1)',
-          userSelect: 'none', gap: '10px',
-          padding: '0 24px',
-          transition: 'background .15s',
-        }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(26,10,46,.1)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(26,10,46,.05)')}
-      >
-        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-          {[...Array(8)].map((_, i) => (
-            <span key={i} style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(26,10,46,.25)' }} />
-          ))}
-        </div>
-        <span style={{
-          fontFamily: 'JetBrains Mono, monospace', fontSize: '9px',
-          color: 'rgba(26,10,46,.5)', letterSpacing: '.18em', fontWeight: 800,
-          padding: '4px 14px', borderRadius: '20px',
-          border: '1px solid rgba(26,10,46,.15)',
-          background: 'rgba(26,10,46,.04)',
-        }}>↕ DRAG TO RESIZE</span>
-        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-          {[...Array(8)].map((_, i) => (
-            <span key={i} style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(26,10,46,.25)' }} />
-          ))}
-        </div>
-      </div>
-
-      {/* ── Top bar ── */}
+      {/* ── Top bar (contains drag handle pill inline) ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: '10px',
         padding: '8px 20px',
@@ -419,8 +385,33 @@ export default function NewsDrawer() {
         <span style={{ fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: '16px', color: '#1a0a2e' }}>{country.name}</span>
         <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#7c3aed', boxShadow: '0 0 8px #7c3aed', animation: 'pulse-ring 1.8s ease-out infinite' }} />
         <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', color: '#7c3aed', letterSpacing: '.12em', fontWeight: 800 }}>LIVE</span>
+
+        {/* ── Drag pill — inline, centred ── */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+          <div
+            onMouseDown={onDragStart}
+            style={{
+              cursor: 'ns-resize', userSelect: 'none',
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '6px 16px', borderRadius: '24px',
+              background: 'rgba(236,72,153,.1)',
+              border: '1.5px solid rgba(236,72,153,.4)',
+              boxShadow: '0 0 12px rgba(236,72,153,.15)',
+              transition: 'all .15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(236,72,153,.18)'; e.currentTarget.style.boxShadow = '0 0 20px rgba(236,72,153,.25)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(236,72,153,.1)'; e.currentTarget.style.boxShadow = '0 0 12px rgba(236,72,153,.15)' }}
+          >
+            <span style={{ fontSize: '11px', lineHeight: 1 }}>↕</span>
+            <span style={{
+              fontFamily: 'JetBrains Mono, monospace', fontSize: '10px',
+              fontWeight: 900, color: '#1a0a2e', letterSpacing: '.16em',
+            }}>DRAG TO RESIZE</span>
+          </div>
+        </div>
+
         <button onClick={closeDrawer} style={{
-          marginLeft: 'auto', width: '28px', height: '28px', borderRadius: '50%',
+          width: '28px', height: '28px', borderRadius: '50%',
           border: '1px solid rgba(26,10,46,.2)', background: 'transparent',
           color: '#1a0a2e', cursor: 'pointer', fontSize: '13px',
           display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .15s',
