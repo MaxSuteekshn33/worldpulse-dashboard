@@ -3,13 +3,15 @@ import { useAppStore, Segment } from '@/lib/store'
 import { getCountryByCode } from '@/lib/countries'
 
 const SEGMENTS: { key: Segment; label: string }[] = [
-  { key: 'headline',    label: 'TOP' },
-  { key: 'geopolitics', label: 'GEO' },
-  { key: 'finance',     label: 'FIN' },
+  { key: 'headline',    label: 'HEADLINES' },
+  { key: 'politics',   label: 'POLITICS' },
+  { key: 'geopolitics', label: 'WORLD' },
+  { key: 'finance',     label: 'FINANCE' },
 ]
 
 const SEGMENT_COLORS: Record<string, string> = {
   'headline':    '#3b82f6', // blue
+  'politics':   '#ec4899', // pink
   'geopolitics': '#f97316', // orange
   'finance':     '#22c55e', // green
 }

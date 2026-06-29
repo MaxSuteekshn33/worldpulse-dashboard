@@ -1,6 +1,6 @@
 'use client'
 import dynamic from 'next/dynamic'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import NewsDrawer from '@/components/NewsDrawer'
 import { COUNTRIES } from '@/lib/countries'
 import { useAppStore } from '@/lib/store'
@@ -24,14 +24,16 @@ function CountrySearch() {
   }
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'absolute', top: '50%', right: '24px', transform: 'translateY(-50%)', zIndex: 99999 }}>
       <div style={{
-        display: 'flex', alignItems: 'center', gap: '8px',
-        background: 'rgba(0,0,0,.7)', border: '1px solid rgba(0,229,255,.25)',
-        borderRadius: '4px', padding: '0 12px', height: '32px',
-        backdropFilter: 'blur(12px)',
+        display: 'flex', alignItems: 'center', gap: '10px',
+        background: 'rgba(4,4,12,.85)',
+        border: '1px solid rgba(0,229,255,.5)',
+        borderRadius: '8px', padding: '0 16px', height: '40px',
+        backdropFilter: 'blur(16px)',
+        boxShadow: '0 0 20px rgba(0,229,255,.2), 0 0 40px rgba(0,229,255,.08)',
       }}>
-        <span style={{ color: 'rgba(0,229,255,.5)', fontSize: '12px' }}>⌕</span>
+        <span style={{ color: '#00e5ff', fontSize: '16px', lineHeight: 1 }}>⌕</span>
         <input
           ref={inputRef}
           value={query}
@@ -41,34 +43,35 @@ function CountrySearch() {
           placeholder="Search country…"
           style={{
             background: 'transparent', border: 'none', outline: 'none',
-            fontFamily: 'JetBrains Mono, monospace', fontSize: '10px',
-            color: '#fff', letterSpacing: '.08em', width: '160px',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: '12px',
+            color: '#fff', letterSpacing: '.08em', width: '180px',
           }}
         />
       </div>
       {open && results.length > 0 && (
         <div style={{
-          position: 'absolute', top: '36px', right: 0,
-          background: 'rgba(4,4,12,.96)', border: '1px solid rgba(0,229,255,.18)',
-          borderRadius: '6px', overflow: 'hidden', zIndex: 99999,
-          minWidth: '200px',
+          position: 'absolute', top: '46px', right: 0,
+          background: 'rgba(4,4,12,.97)', border: '1px solid rgba(0,229,255,.22)',
+          borderRadius: '8px', overflow: 'hidden', zIndex: 99999,
+          minWidth: '240px',
+          boxShadow: '0 8px 32px rgba(0,0,0,.6), 0 0 20px rgba(0,229,255,.08)',
         }}>
           {results.map(c => (
             <div
               key={c.code}
               onMouseDown={() => pick(c.code)}
               style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '8px 14px', cursor: 'pointer',
-                fontFamily: 'JetBrains Mono, monospace', fontSize: '10px',
+                display: 'flex', alignItems: 'center', gap: '12px',
+                padding: '10px 16px', cursor: 'pointer',
+                fontFamily: 'JetBrains Mono, monospace', fontSize: '11px',
                 color: '#fff', letterSpacing: '.06em',
                 borderBottom: '1px solid rgba(255,255,255,.05)',
                 transition: 'background .15s',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,.08)')}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,.1)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <span style={{ fontSize: '14px' }}>{c.flag}</span>
+              <span style={{ fontSize: '16px' }}>{c.flag}</span>
               {c.name}
             </div>
           ))}
@@ -78,18 +81,37 @@ function CountrySearch() {
   )
 }
 
+function AutoOpenIndia() {
+  const selectCountry = useAppStore(s => s.selectCountry)
+  const drawerOpen = useAppStore(s => s.drawerOpen)
+
+  useEffect(() => {
+    if (!drawerOpen) {
+      // Small delay to let the map load first
+      const t = setTimeout(() => selectCountry('IN'), 1200)
+      return () => clearTimeout(t)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return null
+}
+
 export default function Home() {
   return (
     <main style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
 
-      {/* Top nav bar — above everything */}
+      {/* Auto-open India */}
+      <AutoOpenIndia />
+
+      {/* Top nav bar */}
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20000,
-        height: '48px',
+        height: '56px',
         background: 'rgba(0,0,0,.88)',
         borderBottom: '1px solid rgba(0,229,255,.12)',
         backdropFilter: 'blur(16px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        display: 'flex', alignItems: 'center',
         padding: '0 24px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -110,8 +132,8 @@ export default function Home() {
         <CountrySearch />
       </div>
 
-      {/* Map — offset by nav height */}
-      <div style={{ width: '100%', height: '100%', paddingTop: '48px' }}>
+      {/* Map */}
+      <div style={{ width: '100%', height: '100%', paddingTop: '56px' }}>
         <WorldMap />
       </div>
 

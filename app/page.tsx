@@ -5,9 +5,10 @@ import dynamic from 'next/dynamic'
 const MiniMap = dynamic(() => import('@/components/MiniMap'), { ssr: false })
 
 const PULSES = [
-  { color: '#3b82f6', glow: 'rgba(59,130,246,.35)', label: 'Top News',     desc: 'Breaking headlines from CNN, Sky News & Indian Express' },
-  { color: '#f97316', glow: 'rgba(249,115,22,.35)',  label: 'Geopolitics',  desc: 'Diplomacy, conflict, elections & global affairs' },
-  { color: '#22c55e', glow: 'rgba(34,197,94,.35)',   label: 'Economics',    desc: 'Markets, business, trade & financial news' },
+  { color: '#3b82f6', glow: 'rgba(59,130,246,.35)', label: 'Headlines', desc: 'Breaking headlines from CNN, Sky News & Indian Express' },
+  { color: '#ec4899', glow: 'rgba(236,72,153,.35)',  label: 'Politics',  desc: 'Political news, elections & government affairs' },
+  { color: '#f97316', glow: 'rgba(249,115,22,.35)',  label: 'World',     desc: 'Diplomacy, conflict & global affairs' },
+  { color: '#22c55e', glow: 'rgba(34,197,94,.35)',   label: 'Finance',   desc: 'Markets, business, trade & financial news' },
 ]
 
 export default function Landing() {

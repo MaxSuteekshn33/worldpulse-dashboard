@@ -4,9 +4,14 @@ import { XMLParser } from 'fast-xml-parser'
 // ── RSS Feed URLs ──────────────────────────────────────────────
 const RSS_FEEDS = {
   headline: [
-    { url: 'https://rss.cnn.com/rss/edition.rss',                  source: 'CNN' },
-    { url: 'https://feeds.skynews.com/feeds/rss/home.xml',          source: 'Sky News' },
-    { url: 'https://indianexpress.com/feed/',                       source: 'Indian Express' },
+    { url: 'https://rss.cnn.com/rss/edition.rss',                   source: 'CNN' },
+    { url: 'https://feeds.skynews.com/feeds/rss/home.xml',           source: 'Sky News' },
+    { url: 'https://indianexpress.com/feed/',                        source: 'Indian Express' },
+  ],
+  politics: [
+    { url: 'https://rss.cnn.com/rss/cnn_allpolitics.rss',           source: 'CNN' },
+    { url: 'https://feeds.skynews.com/feeds/rss/politics.xml',      source: 'Sky News' },
+    { url: 'https://indianexpress.com/section/politics/feed/',      source: 'Indian Express' },
   ],
   geopolitics: [
     { url: 'https://rss.cnn.com/rss/edition_world.rss',             source: 'CNN' },
@@ -15,7 +20,7 @@ const RSS_FEEDS = {
   ],
   finance: [
     { url: 'https://rss.cnn.com/rss/money_news_international.rss',  source: 'CNN' },
-    { url: 'https://feeds.skynews.com/feeds/rss/business.xml',      source: 'Sky News' },
+    { url: 'https://feeds.skynews.com/feeds/rss/money.xml',         source: 'Sky News' },
     { url: 'https://indianexpress.com/section/business/feed/',      source: 'Indian Express' },
   ],
 }

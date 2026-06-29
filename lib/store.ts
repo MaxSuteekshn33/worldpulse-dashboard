@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type Segment = 'headline' | 'geopolitics' | 'finance'
+export type Segment = 'headline' | 'politics' | 'geopolitics' | 'finance'
 
 export interface NewsArticle {
   id: string

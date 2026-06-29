@@ -6,6 +6,7 @@ import { COUNTRIES } from '@/lib/countries'
 
 const SEGMENT_COLOR = {
   headline:    '#3b82f6',
+  politics:   '#ec4899',
   geopolitics: '#f97316',
   finance:     '#22c55e',
   default:     '#3b82f6',
@@ -32,7 +33,7 @@ const DARK_STYLE: google.maps.MapTypeStyle[] = [
 
 async function fetchBubbleColor(countryCode: string): Promise<string> {
   try {
-    const segments = ['geopolitics', 'finance', 'headline'] as const
+    const segments = ['headline', 'politics', 'geopolitics', 'finance'] as const
     const results = await Promise.all(
       segments.map(seg =>
         fetch(`/api/news?country=${countryCode}&segment=${seg}`)
@@ -207,8 +208,9 @@ export default function WorldMap() {
         padding: '8px 14px', display: 'flex', gap: '14px', alignItems: 'center',
       }}>
         {[
-          { color: '#3b82f6', label: 'HEADLINE' },
-          { color: '#f97316', label: 'GEOPOLITICS' },
+          { color: '#3b82f6', label: 'HEADLINES' },
+          { color: '#ec4899', label: 'POLITICS' },
+          { color: '#f97316', label: 'WORLD' },
           { color: '#22c55e', label: 'FINANCE' },
         ].map(({ color, label }) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
