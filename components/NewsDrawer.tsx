@@ -96,10 +96,10 @@ function SegmentColumn({
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center', gap: '6px',
             }}>
-              <span style={{ fontSize: '18px', opacity: .4 }}>📰</span>
+              <span style={{ fontSize: '18px' }}>📰</span>
               <span style={{
-                fontFamily: 'JetBrains Mono, monospace', fontSize: '9px',
-                color: 'rgba(255,255,255,.2)', letterSpacing: '.1em',
+                fontFamily: 'JetBrains Mono, monospace', fontSize: '10px',
+                fontWeight: 700, color: '#fff', letterSpacing: '.1em',
               }}>CLICK TO LOAD</span>
             </div>
           ) : loading ? (
