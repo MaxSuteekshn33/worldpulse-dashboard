@@ -224,7 +224,7 @@ function NewsGrid() {
                 <div key={seg.key}
                   onClick={() => setSegment(seg.key)}
                   style={{
-                    background: 'rgba(255,255,255,.02)',
+                    background: '#fff',
                     border: `1px solid ${seg.color}25`,
                     borderRadius: '12px', padding: '20px',
                     cursor: 'pointer', transition: 'all .18s',
@@ -235,8 +235,8 @@ function NewsGrid() {
                   onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,.02)'; e.currentTarget.style.borderColor = `${seg.color}25` }}
                 >
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: seg.color, boxShadow: `0 0 10px ${seg.color}` }} />
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '9px', letterSpacing: '.14em', color: seg.color }}>{seg.label}</span>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', color: '#fff', fontWeight: 700 }}>CLICK TO LOAD</span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 800, fontSize: '10px', letterSpacing: '.14em', color: seg.color }}>{seg.label}</span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '9px', color: '#1a0a2e', fontWeight: 800 }}>CLICK TO LOAD</span>
                 </div>
               )
             }
@@ -250,11 +250,11 @@ function NewsGrid() {
             if (segArticles.length === 0) {
               return (
                 <div key={seg.key} style={{
-                  background: 'rgba(255,255,255,.02)', border: `1px solid rgba(255,255,255,.06)`,
+                  background: '#fff', border: `1px solid rgba(255,255,255,.06)`,
                   borderRadius: '12px', padding: '20px', minHeight: '120px',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '9px', color: 'rgba(255,255,255,.2)', textAlign: 'center' }}>NO {seg.label} NEWS</span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '9px', fontWeight: 800, color: '#1a0a2e', textAlign: 'center' }}>NO {seg.label} NEWS</span>
                 </div>
               )
             }
