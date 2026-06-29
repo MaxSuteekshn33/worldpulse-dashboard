@@ -101,23 +101,23 @@ export default function WorldMap() {
       // Add pulse bubble markers
       COUNTRIES.forEach(country => {
         const el = document.createElement('div')
-        el.style.cssText = 'width:32px;height:32px;position:relative;cursor:pointer;'
+        el.style.cssText = 'width:20px;height:20px;position:relative;cursor:pointer;'
 
         const ring = document.createElement('div')
         ring.className = 'bubble-ring'
         ring.style.cssText = `
-          width:32px;height:32px;border-radius:50%;
-          border:1.5px solid ${SEGMENT_COLOR.default};
+          width:20px;height:20px;border-radius:50%;
+          border:1px solid ${SEGMENT_COLOR.default};
           position:absolute;top:0;left:0;
           transition:border-color .6s ease;
         `
         const dot = document.createElement('div')
         dot.style.cssText = `
-          width:10px;height:10px;border-radius:50%;
+          width:6px;height:6px;border-radius:50%;
           background:${SEGMENT_COLOR.default};
           position:absolute;top:50%;left:50%;
           transform:translate(-50%,-50%);
-          box-shadow:0 0 10px ${SEGMENT_COLOR.default};
+          box-shadow:0 0 7px ${SEGMENT_COLOR.default};
           z-index:2;
           transition:background .6s ease,box-shadow .6s ease;
         `
@@ -161,8 +161,8 @@ export default function WorldMap() {
           )
           if (pos) {
             el.style.position = 'absolute'
-            el.style.left = `${pos.x - 16}px`
-            el.style.top = `${pos.y - 16}px`
+            el.style.left = `${pos.x - 10}px`
+            el.style.top = `${pos.y - 10}px`
           }
         }
         overlay.onRemove = function () {
