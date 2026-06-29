@@ -500,7 +500,7 @@ export default function NewsDrawer() {
         </div>
 
         {/* ── RIGHT CONTENT ── */}
-        <div style={{ flex: 1, minWidth: 0, padding: '14px 18px', overflowY: 'auto' }} className="no-scrollbar">
+        <div style={{ flex: 1, minWidth: 0, padding: '14px 18px', overflowY: 'auto' }} className="news-scroll">
           {activeTab === 'news' ? <NewsGrid /> : <FinanceChartsPanel />}
         </div>
       </div>

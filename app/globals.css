@@ -61,6 +61,13 @@ html, body { height: 100%; background: var(--bg); color: #fff; overflow: hidden;
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* ── News deck visible scrollbar ── */
+.news-scroll { scrollbar-width: thin; scrollbar-color: rgba(236,72,153,.4) rgba(26,10,46,.06); }
+.news-scroll::-webkit-scrollbar { width: 5px; }
+.news-scroll::-webkit-scrollbar-track { background: rgba(26,10,46,.05); border-radius: 8px; }
+.news-scroll::-webkit-scrollbar-thumb { background: rgba(236,72,153,.45); border-radius: 8px; }
+.news-scroll::-webkit-scrollbar-thumb:hover { background: rgba(236,72,153,.7); }
+
 /* ── Dot grid ── */
 .dot-grid {
   background-image: radial-gradient(circle, rgba(0,229,255,.07) 1px, transparent 1px);
