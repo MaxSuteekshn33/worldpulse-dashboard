@@ -197,13 +197,13 @@ function NewsGrid() {
             key={s.key}
             onClick={() => setSegment(s.key)}
             style={{
-              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-              fontSize: '8px', letterSpacing: '.12em', padding: '5px 10px',
-              borderRadius: '6px', cursor: 'pointer', transition: 'all .18s',
-              background: selectedSegment === s.key ? `${s.color}20` : 'transparent',
-              border: `1px solid ${selectedSegment === s.key ? s.color + '70' : 'rgba(255,255,255,.1)'}`,
-              color: selectedSegment === s.key ? s.color : 'rgba(255,255,255,.35)',
-              boxShadow: selectedSegment === s.key ? `0 0 12px ${s.color}20` : 'none',
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 800,
+              fontSize: '10px', letterSpacing: '.12em', padding: '7px 14px',
+              borderRadius: '8px', cursor: 'pointer', transition: 'all .18s',
+              background: selectedSegment === s.key ? `${s.color}18` : '#fff',
+              border: `1.5px solid ${selectedSegment === s.key ? s.color : 'rgba(26,10,46,.2)'}`,
+              color: selectedSegment === s.key ? s.color : '#1a0a2e',
+              boxShadow: selectedSegment === s.key ? `0 0 14px ${s.color}25` : '0 1px 4px rgba(26,10,46,.08)',
             }}
           >
             {s.label}
