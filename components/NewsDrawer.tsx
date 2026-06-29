@@ -378,25 +378,32 @@ export default function NewsDrawer() {
       <div
         onMouseDown={onDragStart}
         style={{
-          flexShrink: 0, height: '22px', cursor: 'ns-resize',
+          flexShrink: 0, height: '36px', cursor: 'ns-resize',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(26,10,46,.06)',
+          background: 'rgba(26,10,46,.05)',
           borderBottom: '1px solid rgba(26,10,46,.1)',
-          userSelect: 'none', gap: '6px',
+          userSelect: 'none', gap: '10px',
+          padding: '0 24px',
           transition: 'background .15s',
         }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(26,10,46,.12)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(26,10,46,.06)')}
+        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(26,10,46,.1)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(26,10,46,.05)')}
       >
-        <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-          {[...Array(6)].map((_, i) => (
-            <span key={i} style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'rgba(26,10,46,.3)' }} />
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          {[...Array(8)].map((_, i) => (
+            <span key={i} style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(26,10,46,.25)' }} />
           ))}
         </div>
-        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '7px', color: 'rgba(26,10,46,.45)', letterSpacing: '.14em', fontWeight: 700 }}>DRAG TO RESIZE</span>
-        <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-          {[...Array(6)].map((_, i) => (
-            <span key={i} style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'rgba(26,10,46,.3)' }} />
+        <span style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: '9px',
+          color: 'rgba(26,10,46,.5)', letterSpacing: '.18em', fontWeight: 800,
+          padding: '4px 14px', borderRadius: '20px',
+          border: '1px solid rgba(26,10,46,.15)',
+          background: 'rgba(26,10,46,.04)',
+        }}>↕ DRAG TO RESIZE</span>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          {[...Array(8)].map((_, i) => (
+            <span key={i} style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(26,10,46,.25)' }} />
           ))}
         </div>
       </div>
