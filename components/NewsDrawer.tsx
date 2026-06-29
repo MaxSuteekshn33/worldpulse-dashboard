@@ -144,7 +144,7 @@ function NewsCard({ article, color, segKey }: {
           {/* Source + time */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 5px ${color}` }} />
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', letterSpacing: '.08em', color: 'rgba(255,255,255,.35)', textTransform: 'uppercase' }}>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', fontWeight: 700, letterSpacing: '.08em', color: 'rgba(255,255,255,.65)', textTransform: 'uppercase' }}>
               {article.source} · {article.timeAgo}
             </span>
           </div>
@@ -337,40 +337,91 @@ function SidebarSearch() {
 export default function NewsDrawer() {
   const { drawerOpen, selectedCountry, closeDrawer } = useAppStore()
   const [activeTab, setActiveTab] = useState<'news' | 'charts'>('news')
+  // Default ~42vh so top aligns with southern Africa / Namibia latitude
+  const [panelHeight, setPanelHeight] = useState(42)
+  const dragRef = useRef<{ startY: number; startH: number } | null>(null)
   const country = selectedCountry ? getCountryByCode(selectedCountry) : null
+
+  // Drag handle logic
+  function onDragStart(e: React.MouseEvent) {
+    e.preventDefault()
+    dragRef.current = { startY: e.clientY, startH: panelHeight }
+    document.addEventListener('mousemove', onDragMove)
+    document.addEventListener('mouseup', onDragEnd)
+  }
+  function onDragMove(e: MouseEvent) {
+    if (!dragRef.current) return
+    const dy = dragRef.current.startY - e.clientY
+    const newH = dragRef.current.startH + (dy / window.innerHeight) * 100
+    setPanelHeight(Math.min(88, Math.max(18, newH)))
+  }
+  function onDragEnd() {
+    dragRef.current = null
+    document.removeEventListener('mousemove', onDragMove)
+    document.removeEventListener('mouseup', onDragEnd)
+  }
 
   if (!drawerOpen || !country) return null
 
   return (
     <div className="panel-enter" style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 10000,
-      height: '68vh',
-      background: 'rgba(5,5,14,.95)',
+      height: `${panelHeight}vh`,
+      background: 'rgba(3,3,10,.97)',
       backdropFilter: 'blur(32px) saturate(1.8)',
       WebkitBackdropFilter: 'blur(32px) saturate(1.8)',
-      borderTop: '1px solid rgba(0,229,255,.12)',
-      boxShadow: '0 -16px 80px rgba(0,0,0,.85)',
+      borderTop: '1px solid rgba(0,229,255,.15)',
+      boxShadow: '0 -20px 80px rgba(0,0,0,.9)',
       display: 'flex', flexDirection: 'column',
     }}>
+
+      {/* ── DRAG HANDLE ── */}
+      <div
+        onMouseDown={onDragStart}
+        style={{
+          flexShrink: 0, height: '22px', cursor: 'ns-resize',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,229,255,.03)',
+          borderBottom: '1px solid rgba(0,229,255,.08)',
+          userSelect: 'none', gap: '6px',
+          transition: 'background .15s',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,.07)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,229,255,.03)')}
+      >
+        {/* Drag grip dots */}
+        <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+          {[...Array(6)].map((_, i) => (
+            <span key={i} style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'rgba(0,229,255,.35)' }} />
+          ))}
+        </div>
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '7px', color: 'rgba(0,229,255,.3)', letterSpacing: '.14em' }}>DRAG TO RESIZE</span>
+        <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+          {[...Array(6)].map((_, i) => (
+            <span key={i} style={{ width: '3px', height: '3px', borderRadius: '50%', background: 'rgba(0,229,255,.35)' }} />
+          ))}
+        </div>
+      </div>
+
       {/* ── Top bar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: '10px',
-        padding: '10px 20px 10px',
-        borderBottom: '1px solid rgba(255,255,255,.05)',
+        padding: '8px 20px',
+        borderBottom: '1px solid rgba(255,255,255,.06)',
         flexShrink: 0,
       }}>
         <span style={{ fontSize: '20px' }}>{country.flag}</span>
         <span style={{ fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: '16px', color: '#fff' }}>{country.name}</span>
         <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00e5ff', boxShadow: '0 0 8px #00e5ff', animation: 'pulse-ring 1.8s ease-out infinite' }} />
-        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', color: 'rgba(0,229,255,.5)', letterSpacing: '.12em' }}>LIVE</span>
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', color: 'rgba(0,229,255,.6)', letterSpacing: '.12em', fontWeight: 700 }}>LIVE</span>
         <button onClick={closeDrawer} style={{
           marginLeft: 'auto', width: '28px', height: '28px', borderRadius: '50%',
-          border: '1px solid rgba(255,255,255,.1)', background: 'transparent',
-          color: 'rgba(255,255,255,.4)', cursor: 'pointer', fontSize: '13px',
+          border: '1px solid rgba(255,255,255,.12)', background: 'transparent',
+          color: 'rgba(255,255,255,.5)', cursor: 'pointer', fontSize: '13px',
           display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .15s',
         }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.08)'; e.currentTarget.style.color = '#fff' }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,.4)' }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.1)'; e.currentTarget.style.color = '#fff' }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,.5)' }}
         >✕</button>
       </div>
 
@@ -386,7 +437,7 @@ export default function NewsDrawer() {
         }}>
           {/* Country search */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', letterSpacing: '.14em', color: 'rgba(255,255,255,.3)' }}>SWITCH COUNTRY</span>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', letterSpacing: '.14em', color: 'rgba(255,255,255,.55)', fontWeight: 700 }}>SWITCH COUNTRY</span>
             <SidebarSearch />
           </div>
 
@@ -395,7 +446,7 @@ export default function NewsDrawer() {
 
           {/* Nav CTAs */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', letterSpacing: '.14em', color: 'rgba(255,255,255,.3)' }}>SECTIONS</span>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', letterSpacing: '.14em', color: 'rgba(255,255,255,.55)', fontWeight: 700 }}>SECTIONS</span>
 
             {/* Country News CTA */}
             <button
@@ -414,8 +465,8 @@ export default function NewsDrawer() {
                 <path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/>
               </svg>
               <div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '9px', letterSpacing: '.1em', color: activeTab === 'news' ? '#00e5ff' : 'rgba(255,255,255,.6)' }}>COUNTRY NEWS</div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '7px', color: 'rgba(255,255,255,.25)', letterSpacing: '.06em', marginTop: '2px' }}>Headlines · Politics · World · Finance</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 800, fontSize: '9px', letterSpacing: '.1em', color: activeTab === 'news' ? '#00e5ff' : '#fff' }}>COUNTRY NEWS</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '7px', color: 'rgba(255,255,255,.45)', letterSpacing: '.06em', marginTop: '2px' }}>Headlines · Politics · World · Finance</div>
               </div>
             </button>
 
@@ -435,8 +486,8 @@ export default function NewsDrawer() {
                 <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
               </svg>
               <div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '9px', letterSpacing: '.1em', color: activeTab === 'charts' ? '#22c55e' : 'rgba(255,255,255,.6)' }}>FINANCE CHARTS</div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '7px', color: 'rgba(255,255,255,.25)', letterSpacing: '.06em', marginTop: '2px' }}>Gold · Silver · Sensex · Nifty · S&P · FTSE</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 800, fontSize: '9px', letterSpacing: '.1em', color: activeTab === 'charts' ? '#22c55e' : '#fff' }}>FINANCE CHARTS</div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '7px', color: 'rgba(255,255,255,.45)', letterSpacing: '.06em', marginTop: '2px' }}>Gold · Silver · Sensex · Nifty · S&P · FTSE</div>
               </div>
             </button>
           </div>
@@ -446,7 +497,7 @@ export default function NewsDrawer() {
             {SEGMENTS.map(s => (
               <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: s.color, boxShadow: `0 0 5px ${s.color}`, flexShrink: 0 }} />
-                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', color: 'rgba(255,255,255,.3)', letterSpacing: '.08em' }}>{s.label}</span>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', fontWeight: 700, color: 'rgba(255,255,255,.55)', letterSpacing: '.08em' }}>{s.label}</span>
               </div>
             ))}
           </div>
