@@ -1,6 +1,7 @@
 'use client'
 import dynamic from 'next/dynamic'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import NewsDrawer from '@/components/NewsDrawer'
 import { COUNTRIES } from '@/lib/countries'
 import { useAppStore } from '@/lib/store'
@@ -28,12 +29,15 @@ function CountrySearch() {
       <div style={{
         display: 'flex', alignItems: 'center', gap: '10px',
         background: 'rgba(4,4,12,.85)',
-        border: '1px solid rgba(0,229,255,.5)',
-        borderRadius: '8px', padding: '0 16px', height: '40px',
+        border: '1px solid rgba(0,229,255,.45)',
+        borderRadius: '8px', padding: '0 16px', height: '38px',
         backdropFilter: 'blur(16px)',
-        boxShadow: '0 0 20px rgba(0,229,255,.2), 0 0 40px rgba(0,229,255,.08)',
+        boxShadow: '0 0 20px rgba(0,229,255,.15), 0 0 50px rgba(0,229,255,.05)',
+        transition: 'box-shadow .2s',
       }}>
-        <span style={{ color: '#00e5ff', fontSize: '16px', lineHeight: 1 }}>⌕</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" strokeWidth="2.5">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
         <input
           ref={inputRef}
           value={query}
@@ -43,18 +47,18 @@ function CountrySearch() {
           placeholder="Search country…"
           style={{
             background: 'transparent', border: 'none', outline: 'none',
-            fontFamily: 'JetBrains Mono, monospace', fontSize: '12px',
-            color: '#fff', letterSpacing: '.08em', width: '180px',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: '11px',
+            color: '#fff', letterSpacing: '.08em', width: '170px',
           }}
         />
       </div>
       {open && results.length > 0 && (
         <div style={{
-          position: 'absolute', top: '46px', right: 0,
-          background: 'rgba(4,4,12,.97)', border: '1px solid rgba(0,229,255,.22)',
-          borderRadius: '8px', overflow: 'hidden', zIndex: 99999,
+          position: 'absolute', top: '44px', right: 0,
+          background: 'rgba(4,4,12,.97)', border: '1px solid rgba(0,229,255,.2)',
+          borderRadius: '10px', overflow: 'hidden', zIndex: 99999,
           minWidth: '240px',
-          boxShadow: '0 8px 32px rgba(0,0,0,.6), 0 0 20px rgba(0,229,255,.08)',
+          boxShadow: '0 12px 40px rgba(0,0,0,.7), 0 0 20px rgba(0,229,255,.06)',
         }}>
           {results.map(c => (
             <div
@@ -65,14 +69,15 @@ function CountrySearch() {
                 padding: '10px 16px', cursor: 'pointer',
                 fontFamily: 'JetBrains Mono, monospace', fontSize: '11px',
                 color: '#fff', letterSpacing: '.06em',
-                borderBottom: '1px solid rgba(255,255,255,.05)',
+                borderBottom: '1px solid rgba(255,255,255,.04)',
                 transition: 'background .15s',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,.1)')}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,.08)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
               <span style={{ fontSize: '16px' }}>{c.flag}</span>
               {c.name}
+              <span style={{ marginLeft: 'auto', color: 'rgba(0,229,255,.4)', fontSize: '9px' }}>→</span>
             </div>
           ))}
         </div>
@@ -81,15 +86,19 @@ function CountrySearch() {
   )
 }
 
-function AutoOpenIndia() {
+function AutoInit() {
   const selectCountry = useAppStore(s => s.selectCountry)
   const drawerOpen = useAppStore(s => s.drawerOpen)
+  const searchParams = useSearchParams()
 
   useEffect(() => {
-    if (!drawerOpen) {
-      // Small delay to let the map load first
-      const t = setTimeout(() => selectCountry('IN'), 1200)
-      return () => clearTimeout(t)
+    const code = searchParams.get('country')
+    if (code) {
+      // Country passed from landing page search
+      setTimeout(() => selectCountry(code.toUpperCase()), 900)
+    } else if (!drawerOpen) {
+      // Default: open India
+      setTimeout(() => selectCountry('IN'), 1200)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -97,47 +106,48 @@ function AutoOpenIndia() {
   return null
 }
 
-export default function Home() {
+export default function Dashboard() {
   return (
-    <main style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
+    <main style={{ width: '100vw', height: '100vh', background: '#0a0a0f', position: 'relative', overflow: 'hidden' }}>
 
-      {/* Auto-open India */}
-      <AutoOpenIndia />
+      <Suspense fallback={null}><AutoInit /></Suspense>
 
-      {/* Top nav bar */}
+      {/* ── NAV ── */}
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20000,
-        height: '56px',
-        background: 'rgba(0,0,0,.88)',
-        borderBottom: '1px solid rgba(0,229,255,.12)',
-        backdropFilter: 'blur(16px)',
+        height: '52px',
+        background: 'rgba(6,6,14,.9)',
+        borderBottom: '1px solid rgba(0,229,255,.1)',
+        backdropFilter: 'blur(20px)',
         display: 'flex', alignItems: 'center',
         padding: '0 24px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <a href="/" style={{ textDecoration: 'none' }}>
+            <span style={{
+              fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: '18px',
+              color: '#fff', letterSpacing: '-.02em',
+            }}>
+              WORLD<span style={{ color: '#00e5ff' }}>PULSE</span>
+            </span>
+          </a>
           <span style={{
-            fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: '18px',
-            color: '#fff', letterSpacing: '-.02em',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: '8px',
+            color: 'rgba(0,229,255,.35)', letterSpacing: '.18em',
+            borderLeft: '1px solid rgba(0,229,255,.15)', paddingLeft: '12px',
           }}>
-            WORLD<span style={{ color: '#00e5ff' }}>PULSE</span>
-          </span>
-          <span style={{
-            fontFamily: 'JetBrains Mono, monospace', fontSize: '9px',
-            color: 'rgba(0,229,255,.45)', letterSpacing: '.18em', textTransform: 'uppercase',
-            borderLeft: '1px solid rgba(0,229,255,.18)', paddingLeft: '12px',
-          }}>
-            Live News Intelligence
+            LIVE NEWS INTELLIGENCE
           </span>
         </div>
         <CountrySearch />
       </div>
 
-      {/* Map */}
-      <div style={{ width: '100%', height: '100%', paddingTop: '56px' }}>
+      {/* ── MAP ── */}
+      <div style={{ width: '100%', height: '100%', paddingTop: '52px' }}>
         <WorldMap />
       </div>
 
-      {/* Bottom news drawer */}
+      {/* ── NEWS PANEL ── */}
       <NewsDrawer />
     </main>
   )
