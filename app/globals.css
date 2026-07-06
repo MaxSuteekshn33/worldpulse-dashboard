@@ -85,16 +85,19 @@ html, body { height: 100%; background: var(--bg); color: #fff; overflow: hidden;
   animation: shimmer 1.4s infinite;
 }
 
-/* ── Segment glow borders ── */
-.card-headline  { border-color: rgba(59,130,246,.35);  box-shadow: 0 0 20px rgba(59,130,246,.08); }
-.card-politics  { border-color: rgba(236,72,153,.35);  box-shadow: 0 0 20px rgba(236,72,153,.08); }
-.card-geopolitics { border-color: rgba(249,115,22,.35); box-shadow: 0 0 20px rgba(249,115,22,.08); }
-.card-finance   { border-color: rgba(34,197,94,.35);   box-shadow: 0 0 20px rgba(34,197,94,.08); }
+/* ── News card hover lift ── */
+.news-card:hover { transform: translateY(-2px); background: rgba(255,255,255,.09); }
 
-.card-headline:hover  { border-color: rgba(59,130,246,.7);  box-shadow: 0 0 28px rgba(59,130,246,.18); }
-.card-politics:hover  { border-color: rgba(236,72,153,.7);  box-shadow: 0 0 28px rgba(236,72,153,.18); }
-.card-geopolitics:hover { border-color: rgba(249,115,22,.7); box-shadow: 0 0 28px rgba(249,115,22,.18); }
-.card-finance:hover   { border-color: rgba(34,197,94,.7);   box-shadow: 0 0 28px rgba(34,197,94,.18); }
+/* ── Segment glow borders ── */
+.card-headline  { border-color: rgba(59,130,246,.28) !important; }
+.card-politics  { border-color: rgba(236,72,153,.28) !important; }
+.card-geopolitics { border-color: rgba(249,115,22,.28) !important; }
+.card-finance   { border-color: rgba(34,197,94,.28) !important; }
+
+.card-headline:hover  { border-color: rgba(59,130,246,.7) !important;  box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 28px rgba(59,130,246,.18) !important; }
+.card-politics:hover  { border-color: rgba(236,72,153,.7) !important;  box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 28px rgba(236,72,153,.18) !important; }
+.card-geopolitics:hover { border-color: rgba(249,115,22,.7) !important; box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 28px rgba(249,115,22,.18) !important; }
+.card-finance:hover   { border-color: rgba(34,197,94,.7) !important;   box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 28px rgba(34,197,94,.18) !important; }
 
 /* ── Google Maps zoom control ── */
 .gm-style .gm-bundled-control { filter: invert(1) hue-rotate(180deg) brightness(.7); }
