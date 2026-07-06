@@ -17,7 +17,6 @@ const DARK_STYLE: google.maps.MapTypeStyle[] = [
   { elementType: 'geometry', stylers: [{ color: '#0a0a0f' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#0a0a0f' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#4a4a6a' }] },
-  { featureType: 'country', elementType: 'geometry.stroke', stylers: [{ color: '#2a2a4a' }, { weight: 0.8 }] },
   { featureType: 'administrative.country', elementType: 'geometry.stroke', stylers: [{ color: '#334155' }, { weight: 0.8 }] },
   { featureType: 'administrative.country', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] },
   { featureType: 'administrative.province', elementType: 'geometry.stroke', stylers: [{ color: '#1e1e2e' }] },
