@@ -4,6 +4,7 @@ import { Newspaper, Landmark, Globe2, LineChart, Search, X, GripHorizontal, Arro
 import { useAppStore, Segment } from '@/lib/store'
 import { getCountryByCode } from '@/lib/countries'
 import { COUNTRIES } from '@/lib/countries'
+import { useIsCompact } from '@/lib/useMediaQuery'
 
 // ── Segment config ────────────────────────────────────────────
 const SEGMENTS: { key: Segment; label: string; color: string; icon: LucideIcon }[] = [
@@ -95,6 +96,7 @@ const CHARTS = [
 ]
 
 function FinanceChartsPanel() {
+  const isCompact = useIsCompact()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', overflowY: 'auto', paddingRight: '4px' }}
          className="no-scrollbar">
@@ -102,11 +104,16 @@ function FinanceChartsPanel() {
         <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '10px', letterSpacing: '.16em', color: '#22c55e' }}>LIVE MARKET CHARTS</span>
         <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e', animation: 'pulse-ring 1.8s ease-out infinite' }} />
       </div>
-      {CHARTS.map((row, ri) => (
-        <div key={ri} style={{ display: 'flex', gap: '12px', height: '140px' }}>
-          {row.map(c => <TVChart key={c.symbol} {...c} />)}
-        </div>
-      ))}
+      {isCompact
+        ? CHARTS.flat().map(c => (
+            <div key={c.symbol} style={{ height: '160px' }}><TVChart {...c} /></div>
+          ))
+        : CHARTS.map((row, ri) => (
+            <div key={ri} style={{ display: 'flex', gap: '12px', height: '140px' }}>
+              {row.map(c => <TVChart key={c.symbol} {...c} />)}
+            </div>
+          ))
+      }
     </div>
   )
 }
@@ -185,47 +192,87 @@ function NewsCard({ article, color, segKey }: {
   )
 }
 
-// ── News Grid (2×2) ───────────────────────────────────────────
+// ── News Grid (2×2 desktop / single column mobile) ─────────────
 function NewsGrid() {
   const { articles, loading, selectedSegment, setSegment } = useAppStore()
+  const isCompact = useIsCompact()
 
   const LAYOUT = [
     [SEGMENTS[1], SEGMENTS[2]], // Politics | World
     [SEGMENTS[0], SEGMENTS[3]], // Headlines | Finance
   ]
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', flex: 1 }} className="no-scrollbar">
-      {/* Segment tab row */}
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        {SEGMENTS.map(s => {
-          const Icon = s.icon
-          const active = selectedSegment === s.key
-          return (
-            <button
-              key={s.key}
-              onClick={() => setSegment(s.key)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '7px',
-                fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-                fontSize: '11px', letterSpacing: '.1em', padding: '8px 16px',
-                borderRadius: '10px', cursor: 'pointer', transition: 'all .18s',
-                background: active ? `${s.color}22` : 'rgba(255,255,255,.05)',
-                backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-                border: `1.5px solid ${active ? s.color : 'rgba(255,255,255,.12)'}`,
-                color: active ? s.color : 'rgba(255,255,255,.75)',
-                boxShadow: active ? `0 0 16px ${s.color}30` : 'none',
-              }}
-            >
-              <Icon size={13} strokeWidth={2.3} />
-              {s.label}
-            </button>
-          )
-        })}
-        {loading && (
-          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', color: 'rgba(0,229,255,.6)', letterSpacing: '.08em', alignSelf: 'center' }}>LOADING…</span>
+  const segTabs = (
+    <div style={{
+      display: 'flex', gap: '8px',
+      flexWrap: isCompact ? 'nowrap' : 'wrap',
+      overflowX: isCompact ? 'auto' : 'visible',
+      WebkitOverflowScrolling: 'touch',
+    }} className={isCompact ? 'no-scrollbar' : undefined}>
+      {SEGMENTS.map(s => {
+        const Icon = s.icon
+        const active = selectedSegment === s.key
+        return (
+          <button
+            key={s.key}
+            onClick={() => setSegment(s.key)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '7px', flexShrink: 0,
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+              fontSize: '11px', letterSpacing: '.1em',
+              padding: isCompact ? '11px 16px' : '8px 16px',
+              minHeight: isCompact ? '44px' : undefined,
+              borderRadius: '10px', cursor: 'pointer', transition: 'all .18s',
+              background: active ? `${s.color}22` : 'rgba(255,255,255,.05)',
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              border: `1.5px solid ${active ? s.color : 'rgba(255,255,255,.12)'}`,
+              color: active ? s.color : 'rgba(255,255,255,.75)',
+              boxShadow: active ? `0 0 16px ${s.color}30` : 'none',
+            }}
+          >
+            <Icon size={13} strokeWidth={2.3} />
+            {s.label}
+          </button>
+        )
+      })}
+      {loading && (
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', color: 'rgba(0,229,255,.6)', letterSpacing: '.08em', alignSelf: 'center', flexShrink: 0 }}>LOADING…</span>
+      )}
+    </div>
+  )
+
+  // ── Mobile: single full-width column showing only the active segment ──
+  if (isCompact) {
+    const current = SEGMENTS.find(s => s.key === selectedSegment)!
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', flex: 1 }} className="no-scrollbar">
+        {segTabs}
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {[1, 2, 3].map(i => <div key={i} className="shimmer" style={{ height: '170px', borderRadius: '14px' }} />)}
+          </div>
+        ) : articles.length === 0 ? (
+          <div style={{
+            background: 'rgba(255,255,255,.04)',
+            backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255,255,255,.1)',
+            borderRadius: '14px', padding: '28px 20px', minHeight: '120px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,.5)', textAlign: 'center', letterSpacing: '.04em' }}>NO {current.label} NEWS</span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {articles.slice(0, 6).map(a => <NewsCard key={a.id} article={a} color={current.color} segKey={current.key} />)}
+          </div>
         )}
       </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', flex: 1 }} className="no-scrollbar">
+      {segTabs}
 
       {/* 2×2 grid */}
       {LAYOUT.map((row, ri) => (
@@ -293,6 +340,7 @@ function SidebarSearch() {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const selectCountry = useAppStore(s => s.selectCountry)
+  const isCompact = useIsCompact()
 
   const results = query.trim().length > 0
     ? COUNTRIES.filter(c => c.name.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
@@ -307,20 +355,22 @@ function SidebarSearch() {
         background: 'rgba(255,255,255,.06)',
         backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
         border: '1px solid rgba(255,255,255,.12)',
-        borderRadius: '10px', padding: '9px 12px',
+        borderRadius: '10px', padding: isCompact ? '11px 12px' : '9px 12px',
+        minHeight: isCompact ? '44px' : undefined,
         boxShadow: '0 0 16px rgba(0,229,255,.06)',
       }}>
-        <Search size={13} strokeWidth={2.3} color="#00e5ff" />
+        <Search size={13} strokeWidth={2.3} color="#00e5ff" style={{ flexShrink: 0 }} />
         <input
           value={query}
           onChange={e => { setQuery(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder="Search country…"
+          inputMode="search"
           style={{
             flex: 1, background: 'transparent', border: 'none', outline: 'none',
-            fontFamily: 'JetBrains Mono, monospace', fontSize: '11px',
-            color: '#fff', letterSpacing: '.04em', width: '100%',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: isCompact ? '16px' : '11px',
+            color: '#fff', letterSpacing: '.04em', width: '100%', minWidth: 0,
           }}
         />
       </div>
@@ -336,8 +386,9 @@ function SidebarSearch() {
           {results.map(c => (
             <div key={c.code} onMouseDown={() => pick(c.code)} style={{
               display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '9px 12px', cursor: 'pointer',
-              fontFamily: 'JetBrains Mono, monospace', fontSize: '11px',
+              padding: isCompact ? '12px' : '9px 12px', minHeight: isCompact ? '44px' : undefined,
+              cursor: 'pointer',
+              fontFamily: 'JetBrains Mono, monospace', fontSize: isCompact ? '13px' : '11px',
               color: '#fff', borderBottom: '1px solid rgba(255,255,255,.06)',
               transition: 'background .12s',
             }}
@@ -358,28 +409,49 @@ function SidebarSearch() {
 export default function NewsDrawer() {
   const { drawerOpen, selectedCountry, closeDrawer } = useAppStore()
   const [activeTab, setActiveTab] = useState<'news' | 'charts'>('news')
-  // Default ~42vh so top aligns with southern Africa / Namibia latitude
-  const [panelHeight, setPanelHeight] = useState(42)
+  const isCompact = useIsCompact()
+  // Default ~42vh (desktop) so top aligns with southern Africa / Namibia latitude;
+  // mobile starts taller (58vh) since content stacks into a single column.
+  // null = "no manual override yet" — falls back to the responsive default below.
+  const [panelHeightOverride, setPanelHeight] = useState<number | null>(null)
+  const panelHeight = panelHeightOverride ?? (isCompact ? 58 : 42)
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
   const country = selectedCountry ? getCountryByCode(selectedCountry) : null
+  const MIN_H = 18
+  const MAX_H = isCompact ? 92 : 88
 
-  // Drag handle logic
+  // Drag handle logic — mouse (desktop) + touch (mobile) share the same math
+  function beginDrag(clientY: number) {
+    dragRef.current = { startY: clientY, startH: panelHeight }
+  }
+  function updateDrag(clientY: number) {
+    if (!dragRef.current) return
+    const dy = dragRef.current.startY - clientY
+    const newH = dragRef.current.startH + (dy / window.innerHeight) * 100
+    setPanelHeight(Math.min(MAX_H, Math.max(MIN_H, newH)))
+  }
+  function endDrag() {
+    dragRef.current = null
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+    document.removeEventListener('touchmove', onTouchMove)
+    document.removeEventListener('touchend', onTouchEnd)
+  }
+  function onMouseMove(e: MouseEvent) { updateDrag(e.clientY) }
+  function onMouseUp() { endDrag() }
+  function onTouchMove(e: TouchEvent) { e.preventDefault(); updateDrag(e.touches[0].clientY) }
+  function onTouchEnd() { endDrag() }
+
   function onDragStart(e: React.MouseEvent) {
     e.preventDefault()
-    dragRef.current = { startY: e.clientY, startH: panelHeight }
-    document.addEventListener('mousemove', onDragMove)
-    document.addEventListener('mouseup', onDragEnd)
+    beginDrag(e.clientY)
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
   }
-  function onDragMove(e: MouseEvent) {
-    if (!dragRef.current) return
-    const dy = dragRef.current.startY - e.clientY
-    const newH = dragRef.current.startH + (dy / window.innerHeight) * 100
-    setPanelHeight(Math.min(88, Math.max(18, newH)))
-  }
-  function onDragEnd() {
-    dragRef.current = null
-    document.removeEventListener('mousemove', onDragMove)
-    document.removeEventListener('mouseup', onDragEnd)
+  function onDragTouchStart(e: React.TouchEvent) {
+    beginDrag(e.touches[0].clientY)
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
+    document.addEventListener('touchend', onTouchEnd)
   }
 
   if (!drawerOpen || !country) return null
@@ -388,6 +460,7 @@ export default function NewsDrawer() {
     <div className="panel-enter" style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 10000,
       height: `${panelHeight}vh`,
+      paddingBottom: 'var(--safe-bottom)',
       background: 'rgba(10,10,20,.78)',
       backdropFilter: 'blur(28px) saturate(180%)',
       WebkitBackdropFilter: 'blur(28px) saturate(180%)',
@@ -398,24 +471,29 @@ export default function NewsDrawer() {
 
       {/* ── Top bar (contains drag handle pill inline) ── */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: '10px',
-        padding: '10px 20px',
+        display: 'flex', alignItems: 'center', gap: isCompact ? '8px' : '10px',
+        padding: isCompact ? '8px 12px' : '10px 20px',
         borderBottom: '1px solid rgba(255,255,255,.1)',
         flexShrink: 0, background: 'rgba(255,255,255,.03)',
+        flexWrap: isCompact ? 'wrap' : 'nowrap',
       }}>
-        <span style={{ fontSize: '20px' }}>{country.flag}</span>
-        <span style={{ fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: '16px', color: '#fff' }}>{country.name}</span>
-        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#7c3aed', boxShadow: '0 0 8px #7c3aed', animation: 'pulse-ring 1.8s ease-out infinite' }} />
-        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', color: '#a78bfa', letterSpacing: '.1em', fontWeight: 700 }}>LIVE</span>
+        <span style={{ fontSize: isCompact ? '17px' : '20px' }}>{country.flag}</span>
+        <span style={{ fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: isCompact ? '14px' : '16px', color: '#fff' }}>{country.name}</span>
+        {!isCompact && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#7c3aed', boxShadow: '0 0 8px #7c3aed', animation: 'pulse-ring 1.8s ease-out infinite' }} />}
+        {!isCompact && <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', color: '#a78bfa', letterSpacing: '.1em', fontWeight: 700 }}>LIVE</span>}
 
-        {/* ── Drag pill — inline, centred ── */}
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+        {/* ── Drag pill — inline, centred; wide touch-friendly hit area on mobile ── */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', order: isCompact ? 3 : 0, width: isCompact ? '100%' : undefined }}>
           <div
             onMouseDown={onDragStart}
+            onTouchStart={onDragTouchStart}
             style={{
-              cursor: 'ns-resize', userSelect: 'none',
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '6px 16px', borderRadius: '24px',
+              cursor: 'ns-resize', userSelect: 'none', touchAction: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              padding: isCompact ? '10px 16px' : '6px 16px',
+              minHeight: isCompact ? '44px' : undefined,
+              width: isCompact ? '100%' : undefined,
+              borderRadius: isCompact ? '12px' : '24px',
               background: 'rgba(236,72,153,.12)',
               backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
               border: '1.5px solid rgba(236,72,153,.4)',
@@ -433,92 +511,132 @@ export default function NewsDrawer() {
           </div>
         </div>
 
-        <button onClick={closeDrawer} style={{
-          width: '28px', height: '28px', borderRadius: '50%',
+        <button onClick={closeDrawer} aria-label="Close news panel" style={{
+          width: isCompact ? '40px' : '28px', height: isCompact ? '40px' : '28px', borderRadius: '50%',
           border: '1px solid rgba(255,255,255,.16)', background: 'rgba(255,255,255,.04)',
-          color: '#fff', cursor: 'pointer',
+          color: '#fff', cursor: 'pointer', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .15s',
         }}
         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.1)' }}
         onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,.04)' }}
-        ><X size={14} strokeWidth={2.3} /></button>
+        ><X size={isCompact ? 16 : 14} strokeWidth={2.3} /></button>
       </div>
 
-      {/* ── Body: sidebar + content ── */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      {/* ── Body: sidebar + content (sidebar collapses to a top strip on mobile) ── */}
+      <div style={{ display: 'flex', flexDirection: isCompact ? 'column' : 'row', flex: 1, minHeight: 0 }}>
 
-        {/* ── LEFT SIDEBAR ── */}
-        <div style={{
-          width: '200px', flexShrink: 0,
-          borderRight: '1px solid rgba(255,255,255,.1)',
-          background: 'rgba(255,255,255,.02)', padding: '16px 14px',
-          display: 'flex', flexDirection: 'column', gap: '20px',
-        }}>
-          {/* Country search */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', letterSpacing: '.1em', color: 'rgba(255,255,255,.45)', fontWeight: 700 }}>SWITCH COUNTRY</span>
+        {isCompact ? (
+          /* ── MOBILE TOP STRIP: search + section toggle, no legend/descriptions ── */
+          <div style={{
+            flexShrink: 0,
+            borderBottom: '1px solid rgba(255,255,255,.1)',
+            background: 'rgba(255,255,255,.02)', padding: '10px 14px',
+            display: 'flex', flexDirection: 'column', gap: '8px',
+          }}>
             <SidebarSearch />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setActiveTab('news')}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                  minHeight: '44px', padding: '0 10px', borderRadius: '10px', cursor: 'pointer',
+                  background: activeTab === 'news' ? 'rgba(124,58,237,.16)' : 'rgba(255,255,255,.04)',
+                  border: `1px solid ${activeTab === 'news' ? 'rgba(124,58,237,.5)' : 'rgba(255,255,255,.1)'}`,
+                  transition: 'all .18s',
+                }}
+              >
+                <Newspaper size={14} strokeWidth={2} color={activeTab === 'news' ? '#a78bfa' : 'rgba(255,255,255,.6)'} />
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '10.5px', letterSpacing: '.06em', color: activeTab === 'news' ? '#a78bfa' : '#fff' }}>NEWS</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('charts')}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                  minHeight: '44px', padding: '0 10px', borderRadius: '10px', cursor: 'pointer',
+                  background: activeTab === 'charts' ? 'rgba(34,197,94,.16)' : 'rgba(255,255,255,.04)',
+                  border: `1px solid ${activeTab === 'charts' ? 'rgba(34,197,94,.5)' : 'rgba(255,255,255,.1)'}`,
+                  transition: 'all .18s',
+                }}
+              >
+                <LineChart size={14} strokeWidth={2} color={activeTab === 'charts' ? '#4ade80' : 'rgba(255,255,255,.6)'} />
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '10.5px', letterSpacing: '.06em', color: activeTab === 'charts' ? '#4ade80' : '#fff' }}>CHARTS</span>
+              </button>
+            </div>
           </div>
+        ) : (
+          /* ── DESKTOP LEFT SIDEBAR ── */
+          <div style={{
+            width: '200px', flexShrink: 0,
+            borderRight: '1px solid rgba(255,255,255,.1)',
+            background: 'rgba(255,255,255,.02)', padding: '16px 14px',
+            display: 'flex', flexDirection: 'column', gap: '20px',
+          }}>
+            {/* Country search */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', letterSpacing: '.1em', color: 'rgba(255,255,255,.45)', fontWeight: 700 }}>SWITCH COUNTRY</span>
+              <SidebarSearch />
+            </div>
 
-          {/* Divider */}
-          <div style={{ height: '1px', background: 'rgba(255,255,255,.08)' }} />
+            {/* Divider */}
+            <div style={{ height: '1px', background: 'rgba(255,255,255,.08)' }} />
 
-          {/* Nav CTAs */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', letterSpacing: '.1em', color: 'rgba(255,255,255,.45)', fontWeight: 700 }}>SECTIONS</span>
+            {/* Nav CTAs */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', letterSpacing: '.1em', color: 'rgba(255,255,255,.45)', fontWeight: 700 }}>SECTIONS</span>
 
-            {/* Country News CTA */}
-            <button
-              onClick={() => setActiveTab('news')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '10px 12px', borderRadius: '10px', cursor: 'pointer',
-                background: activeTab === 'news' ? 'rgba(124,58,237,.16)' : 'rgba(255,255,255,.04)',
-                border: `1px solid ${activeTab === 'news' ? 'rgba(124,58,237,.5)' : 'rgba(255,255,255,.1)'}`,
-                transition: 'all .18s', textAlign: 'left',
-                boxShadow: activeTab === 'news' ? '0 0 16px rgba(124,58,237,.15)' : 'none',
-              }}
-            >
-              <Newspaper size={15} strokeWidth={2} color={activeTab === 'news' ? '#a78bfa' : 'rgba(255,255,255,.55)'} />
-              <div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '10.5px', letterSpacing: '.08em', color: activeTab === 'news' ? '#a78bfa' : '#fff' }}>COUNTRY NEWS</div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8.5px', color: 'rgba(255,255,255,.45)', letterSpacing: '.04em', marginTop: '2px', fontWeight: 500 }}>Headlines · Politics · World · Finance</div>
-              </div>
-            </button>
+              {/* Country News CTA */}
+              <button
+                onClick={() => setActiveTab('news')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 12px', borderRadius: '10px', cursor: 'pointer',
+                  background: activeTab === 'news' ? 'rgba(124,58,237,.16)' : 'rgba(255,255,255,.04)',
+                  border: `1px solid ${activeTab === 'news' ? 'rgba(124,58,237,.5)' : 'rgba(255,255,255,.1)'}`,
+                  transition: 'all .18s', textAlign: 'left',
+                  boxShadow: activeTab === 'news' ? '0 0 16px rgba(124,58,237,.15)' : 'none',
+                }}
+              >
+                <Newspaper size={15} strokeWidth={2} color={activeTab === 'news' ? '#a78bfa' : 'rgba(255,255,255,.55)'} />
+                <div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '10.5px', letterSpacing: '.08em', color: activeTab === 'news' ? '#a78bfa' : '#fff' }}>COUNTRY NEWS</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8.5px', color: 'rgba(255,255,255,.45)', letterSpacing: '.04em', marginTop: '2px', fontWeight: 500 }}>Headlines · Politics · World · Finance</div>
+                </div>
+              </button>
 
-            {/* Finance Charts CTA */}
-            <button
-              onClick={() => setActiveTab('charts')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '10px 12px', borderRadius: '10px', cursor: 'pointer',
-                background: activeTab === 'charts' ? 'rgba(34,197,94,.16)' : 'rgba(255,255,255,.04)',
-                border: `1px solid ${activeTab === 'charts' ? 'rgba(34,197,94,.5)' : 'rgba(255,255,255,.1)'}`,
-                transition: 'all .18s', textAlign: 'left',
-                boxShadow: activeTab === 'charts' ? '0 0 16px rgba(34,197,94,.15)' : 'none',
-              }}
-            >
-              <LineChart size={15} strokeWidth={2} color={activeTab === 'charts' ? '#4ade80' : 'rgba(255,255,255,.55)'} />
-              <div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '10.5px', letterSpacing: '.08em', color: activeTab === 'charts' ? '#4ade80' : '#fff' }}>FINANCE CHARTS</div>
-                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8.5px', color: 'rgba(255,255,255,.45)', letterSpacing: '.04em', marginTop: '2px', fontWeight: 500 }}>Gold · Silver · Sensex · Nifty · S&P · FTSE</div>
-              </div>
-            </button>
+              {/* Finance Charts CTA */}
+              <button
+                onClick={() => setActiveTab('charts')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 12px', borderRadius: '10px', cursor: 'pointer',
+                  background: activeTab === 'charts' ? 'rgba(34,197,94,.16)' : 'rgba(255,255,255,.04)',
+                  border: `1px solid ${activeTab === 'charts' ? 'rgba(34,197,94,.5)' : 'rgba(255,255,255,.1)'}`,
+                  transition: 'all .18s', textAlign: 'left',
+                  boxShadow: activeTab === 'charts' ? '0 0 16px rgba(34,197,94,.15)' : 'none',
+                }}
+              >
+                <LineChart size={15} strokeWidth={2} color={activeTab === 'charts' ? '#4ade80' : 'rgba(255,255,255,.55)'} />
+                <div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '10.5px', letterSpacing: '.08em', color: activeTab === 'charts' ? '#4ade80' : '#fff' }}>FINANCE CHARTS</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8.5px', color: 'rgba(255,255,255,.45)', letterSpacing: '.04em', marginTop: '2px', fontWeight: 500 }}>Gold · Silver · Sensex · Nifty · S&P · FTSE</div>
+                </div>
+              </button>
+            </div>
+
+            {/* Segment legend */}
+            <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {SEGMENTS.map(s => (
+                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <s.icon size={12} strokeWidth={2.2} color={s.color} />
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,.7)', letterSpacing: '.06em' }}>{s.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
+        )}
 
-          {/* Segment legend */}
-          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {SEGMENTS.map(s => (
-              <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                <s.icon size={12} strokeWidth={2.2} color={s.color} />
-                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,.7)', letterSpacing: '.06em' }}>{s.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── RIGHT CONTENT ── */}
-        <div style={{ flex: 1, minWidth: 0, padding: '14px 18px', overflowY: 'auto' }} className="news-scroll">
+        {/* ── RIGHT / MAIN CONTENT ── */}
+        <div style={{ flex: 1, minWidth: 0, padding: isCompact ? '12px 14px' : '14px 18px', overflowY: 'auto' }} className="news-scroll">
           {activeTab === 'news' ? <NewsGrid /> : <FinanceChartsPanel />}
         </div>
       </div>

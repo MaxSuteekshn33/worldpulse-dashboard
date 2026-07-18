@@ -1,10 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
 
 export const metadata: Metadata = {
   title: "WorldPulse — Live News Intelligence",
   description: "Interactive world news dashboard",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#0a0a0f",
 };
 
 export function generateStaticParams() { return [] }
