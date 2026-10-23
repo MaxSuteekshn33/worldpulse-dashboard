@@ -1,6 +1,8 @@
 'use client'
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
+// Cross-fades when the destination is prerendered; a plain navigation
+// otherwise, so on-demand pages still show their skeleton at once.
+import Link from '@/components/FastLink'
 import { useEffect } from 'react'
 import CountryPanel from '@/components/CountryPanel'
 import CountUp from '@/components/CountUp'

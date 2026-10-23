@@ -1,4 +1,6 @@
-import Link from 'next/link'
+// Cross-fades when the destination is prerendered; a plain navigation
+// otherwise, so on-demand pages still show their skeleton at once.
+import Link from '@/components/FastLink'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { ArrowLeft, ArrowRight, Newspaper } from 'lucide-react'

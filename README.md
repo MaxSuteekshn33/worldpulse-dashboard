@@ -271,6 +271,34 @@ a narrow wash along the left edge when collapsed, wider and darker when open.
 The scrim used to be a radial centred on the hero, which darkened the middle of
 the map for copy that no longer sits there.
 
+## Page transitions, only where they can't hurt
+
+A view transition freezes the old page until the new route commits. That is
+fine toward a prerendered route and actively harmful toward one that renders on
+demand — the first attempt at this wrapped every navigation (React's
+`ViewTransition` behind `experimental.viewTransition`) and it hid the loading
+skeletons on exactly the 195 country pages that need them, then aborted with
+`TimeoutError: Transition was aborted because of timeout in DOM update` after
+holding the page still for four seconds.
+
+`components/NavTransition.tsx` is the scoped version, and it's safe for two
+reasons:
+
+- **It only runs toward prerendered routes** — `/`, `/dashboard` and the five
+  `FEATURED_CODES` countries. `FastLink` falls through to an ordinary
+  navigation for anything else, so on-demand pages still show their skeleton
+  the instant they're clicked.
+- **The freeze is capped.** The browser waits on the callback's promise, which
+  resolves when the route commits *or* after `FREEZE_CAP` (220ms), whichever
+  comes first. Being wrong about a route costs a fifth of a second rather than
+  four seconds and an uncaught error.
+
+It calls `document.startViewTransition` directly, so the app stays on stable
+React instead of moving to the experimental channel for a cross-fade.
+
+Measured: 1 transition on `/` → `/dashboard`, **0** on
+`/country/IN` → `/country/IN/headline`, no console errors either way.
+
 ## The landing page shows its work
 
 The hero said *"The world is happening. Track it live."* over a decorative map

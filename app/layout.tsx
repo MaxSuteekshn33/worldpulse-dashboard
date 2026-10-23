@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import NavTransition from '@/components/NavTransition'
 
 export const metadata: Metadata = {
   title: "WorldPulse — Live News Intelligence",
@@ -29,7 +30,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body style={{ margin: 0 }}>{children}</body>
+      <body style={{ margin: 0 }}><NavTransition>{children}</NavTransition></body>
     </html>
   );
 }

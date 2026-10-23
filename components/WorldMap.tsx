@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSoftNav } from '@/components/NavTransition'
 import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS, type Segment } from '@/lib/segments'
@@ -200,6 +201,9 @@ export default function WorldMap() {
   const mapRef = useRef<google.maps.Map | null>(null)
   const markersRef = useRef<Map<string, MarkerEls>>(new Map())
   const router = useRouter()
+  // Stable: NavTransition memoises it on the router, so naming it as a
+  // dependency below doesn't rebuild 200 markers.
+  const navigate = useSoftNav()
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return
@@ -371,7 +375,7 @@ export default function WorldMap() {
         paint(els, null)
         markersRef.current.set(country.code, els)
 
-        const open = () => router.push(`/country/${country.code}`)
+        const open = () => navigate(`/country/${country.code}`)
 
         el.addEventListener('mouseenter', () => {
           tip.style.display = 'block'
@@ -448,7 +452,7 @@ export default function WorldMap() {
       markers.clear()
       mapRef.current = null
     }
-  }, [router])
+  }, [router, navigate])
 
   return (
     <div style={{ width: '100%', height: '100%', background: 'var(--bg)', position: 'relative' }}>

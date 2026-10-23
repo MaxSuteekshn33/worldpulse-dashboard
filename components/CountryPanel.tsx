@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import Link from 'next/link'
+// Cross-fades when the destination is prerendered; a plain navigation
+// otherwise, so on-demand pages still show their skeleton at once.
+import Link from '@/components/FastLink'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import CountrySearch from '@/components/CountrySearch'
 import { COUNTRIES, FEATURED_CODES } from '@/lib/countries'
