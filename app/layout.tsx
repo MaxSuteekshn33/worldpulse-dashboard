@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "WorldPulse — Live News Intelligence",
-  description: "Track headlines, politics, world affairs, economy and finance across 50 countries — updated every 20 minutes.",
+  description: "Track headlines, politics, world affairs, economy and finance across 100 countries — updated every 20 minutes.",
 };
 
 export const viewport: Viewport = {

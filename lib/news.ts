@@ -1,5 +1,7 @@
 import { XMLParser } from 'fast-xml-parser'
 import { SEGMENT_IDS, type Segment } from './segments'
+import { matchesCountry } from './aliases'
+import { getCountryByCode } from './countries'
 
 /** How long a cached feed response stays warm (seconds). 20 minutes. */
 export const REVALIDATE_SECONDS = 1200
@@ -17,32 +19,56 @@ export interface Feed {
    * most of them away. Articles from such a feed count as a match for that code.
    */
   implies?: string
+  /**
+   * Google News aggregates many publishers into a single feed, so the real
+   * outlet comes from each item's <source> element rather than the feed itself.
+   */
+  dynamicSource?: boolean
 }
 
 /**
  * Live, verified RSS endpoints.
+ * All free, no API key, no quota.
+ *
  * NOTE: every CNN RSS endpoint (rss.cnn.com/*) is dead — it refuses connections
  * outright, which previously left whole segments empty or stuck on old items.
- * Replaced with BBC / Guardian / Al Jazeera, which are free and need no key.
+ * Do not re-add it without testing.
+ *
+ * Sky News Australia has no working public feed either (every documented path
+ * returns 0 items or 404), so Australian coverage comes from ABC News, the
+ * national broadcaster.
+ *
+ * Business Standard's topic feeds (world-news, international, current-affairs)
+ * are frozen in 2023; only latest.rss / economy-102 / markets-106 are live.
  */
 export const RSS_FEEDS: Record<Segment, Feed[]> = {
   headline: [
     { url: 'https://feeds.bbci.co.uk/news/rss.xml',                      source: 'BBC' },
     { url: 'https://www.theguardian.com/world/rss',                      source: 'The Guardian' },
     { url: 'https://www.aljazeera.com/xml/rss/all.xml',                  source: 'Al Jazeera' },
+    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',  source: 'New York Times' },
+    { url: 'https://www.euronews.com/rss',                               source: 'Euronews' },
+    { url: 'https://www.abc.net.au/news/feed/51120/rss.xml',             source: 'ABC News',       implies: 'AU' },
     { url: 'https://indianexpress.com/section/india/feed/',              source: 'Indian Express', implies: 'IN' },
+    { url: 'https://www.business-standard.com/rss/latest.rss',           source: 'Business Standard', implies: 'IN' },
     { url: 'https://feeds.skynews.com/feeds/rss/home.xml',               source: 'Sky News' },
   ],
   politics: [
     { url: 'https://feeds.bbci.co.uk/news/politics/rss.xml',             source: 'BBC',            implies: 'GB' },
     { url: 'https://www.theguardian.com/politics/rss',                   source: 'The Guardian',   implies: 'GB' },
+    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml',  source: 'New York Times', implies: 'US' },
+    { url: 'https://www.euronews.com/rss?level=theme&name=news',         source: 'Euronews' },
     { url: 'https://indianexpress.com/section/political-pulse/feed/',    source: 'Indian Express', implies: 'IN' },
+    { url: 'https://economictimes.indiatimes.com/news/politics-and-nation/rssfeeds/1052732854.cms', source: 'Economic Times', implies: 'IN' },
     { url: 'https://feeds.skynews.com/feeds/rss/politics.xml',           source: 'Sky News',       implies: 'GB' },
   ],
   world: [
     { url: 'https://feeds.bbci.co.uk/news/world/rss.xml',                source: 'BBC' },
     { url: 'https://www.theguardian.com/world/rss',                      source: 'The Guardian' },
     { url: 'https://www.aljazeera.com/xml/rss/all.xml',                  source: 'Al Jazeera' },
+    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',     source: 'New York Times' },
+    { url: 'https://www.euronews.com/rss',                               source: 'Euronews' },
+    { url: 'https://www.abc.net.au/news/feed/45910/rss.xml',             source: 'ABC News' },
     { url: 'https://indianexpress.com/section/world/feed/',              source: 'Indian Express' },
     { url: 'https://feeds.skynews.com/feeds/rss/world.xml',              source: 'Sky News' },
   ],
@@ -50,16 +76,58 @@ export const RSS_FEEDS: Record<Segment, Feed[]> = {
   economy: [
     { url: 'https://feeds.bbci.co.uk/news/business/economy/rss.xml',     source: 'BBC' },
     { url: 'https://www.theguardian.com/business/economics/rss',         source: 'The Guardian' },
+    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml',   source: 'New York Times' },
+    { url: 'https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms', source: 'Economic Times', implies: 'IN' },
+    { url: 'https://www.business-standard.com/rss/economy-102.rss',      source: 'Business Standard', implies: 'IN' },
     { url: 'https://indianexpress.com/section/business/economy/feed/',   source: 'Indian Express', implies: 'IN' },
     { url: 'https://indianexpress.com/section/business/feed/',           source: 'Indian Express', implies: 'IN' },
   ],
   // Markets, companies and money.
   finance: [
-    { url: 'https://feeds.skynews.com/feeds/rss/business.xml',           source: 'Sky News',       implies: 'GB' },
     { url: 'https://feeds.bbci.co.uk/news/business/rss.xml',             source: 'BBC' },
     { url: 'https://www.theguardian.com/uk/business/rss',                source: 'The Guardian',   implies: 'GB' },
+    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',  source: 'New York Times' },
+    { url: 'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms', source: 'Economic Times', implies: 'IN' },
+    { url: 'https://www.business-standard.com/rss/markets-106.rss',      source: 'Business Standard', implies: 'IN' },
     { url: 'https://indianexpress.com/section/business/feed/',           source: 'Indian Express', implies: 'IN' },
+    { url: 'https://feeds.skynews.com/feeds/rss/business.xml',           source: 'Sky News',       implies: 'GB' },
   ],
+}
+
+export { matchesCountry }
+
+/**
+ * Extra query terms that steer a Google News search toward each segment.
+ * Empty for headlines — the country name alone is the broadest, freshest net.
+ */
+const SEGMENT_QUERY: Record<Segment, string> = {
+  headline: '',
+  politics: 'politics OR government OR election',
+  world:    'foreign policy OR diplomacy OR international',
+  economy:  'economy OR inflation OR trade OR GDP',
+  finance:  'markets OR stocks OR banking OR currency',
+}
+
+/**
+ * Per-country Google News search feed.
+ *
+ * The ten curated newsrooms skew UK/US/India/Australia, so most of the smaller
+ * countries came back empty — Ireland and Lebanon both returned nothing. This
+ * fills the gap for any country.
+ *
+ * Deliberately uses the SEARCH endpoint, not the localised edition: Google only
+ * publishes English editions for some countries, and the rest silently fall
+ * back to the US edition, which would have injected US stories into, say,
+ * Lebanon's page.
+ */
+export function googleNewsFeed(countryName: string, segment: Segment): Feed {
+  const extra = SEGMENT_QUERY[segment]
+  const query = `"${countryName}"${extra ? ' ' + extra : ''} when:${MAX_AGE_DAYS}d`
+  const url =
+    'https://news.google.com/rss/search?q=' +
+    encodeURIComponent(query) +
+    '&hl=en-US&gl=US&ceid=US:en'
+  return { url, source: 'Google News', dynamicSource: true }
 }
 
 /** Distinct newsroom count, for the dashboard stats strip. */
@@ -67,57 +135,49 @@ export const SOURCE_COUNT = Array.from(
   new Set(Object.values(RSS_FEEDS).flat().map(f => f.source))
 ).length
 
-export const COUNTRY_ALIASES: Record<string, string[]> = {
-  IN: ['India', 'Indian', 'New Delhi', 'Mumbai', 'Modi', 'Bengaluru', 'Kolkata'],
-  US: ['United States', 'America', 'American', 'Washington', 'Biden', 'Trump', 'U.S.', 'US '],
-  GB: ['Britain', 'British', 'UK', 'United Kingdom', 'London', 'England', 'Starmer'],
-  AU: ['Australia', 'Australian', 'Sydney', 'Melbourne', 'Canberra'],
-  CN: ['China', 'Chinese', 'Beijing', 'Xi Jinping', 'Shanghai'],
-  RU: ['Russia', 'Russian', 'Moscow', 'Putin', 'Kremlin'],
-  DE: ['Germany', 'German', 'Berlin', 'Scholz', 'Merz'],
-  FR: ['France', 'French', 'Paris', 'Macron'],
-  JP: ['Japan', 'Japanese', 'Tokyo'],
-  BR: ['Brazil', 'Brazilian', 'Brasilia', 'Lula'],
-  CA: ['Canada', 'Canadian', 'Ottawa', 'Toronto', 'Carney'],
-  ZA: ['South Africa', 'South African', 'Johannesburg', 'Cape Town'],
-  NG: ['Nigeria', 'Nigerian', 'Lagos', 'Abuja'],
-  MX: ['Mexico', 'Mexican', 'Sheinbaum'],
-  AR: ['Argentina', 'Argentine', 'Buenos Aires', 'Milei'],
-  EG: ['Egypt', 'Egyptian', 'Cairo'],
-  IL: ['Israel', 'Israeli', 'Gaza', 'Tel Aviv', 'Jerusalem', 'Netanyahu'],
-  SA: ['Saudi Arabia', 'Saudi', 'Riyadh'],
-  PK: ['Pakistan', 'Pakistani', 'Islamabad', 'Karachi', 'Lahore'],
-  KR: ['South Korea', 'Korean', 'Seoul'],
-  IT: ['Italy', 'Italian', 'Rome', 'Meloni'],
-  UA: ['Ukraine', 'Ukrainian', 'Kyiv', 'Zelensky'],
-  TR: ['Turkey', 'Turkish', 'Ankara', 'Erdogan', 'Türkiye', 'Istanbul'],
-  ID: ['Indonesia', 'Indonesian', 'Jakarta'],
-  NL: ['Netherlands', 'Dutch', 'Amsterdam', 'Hague'],
-  ES: ['Spain', 'Spanish', 'Madrid', 'Barcelona'],
-  SE: ['Sweden', 'Swedish', 'Stockholm'],
-  NO: ['Norway', 'Norwegian', 'Oslo'],
-  PL: ['Poland', 'Polish', 'Warsaw'],
-  CH: ['Switzerland', 'Swiss', 'Zurich', 'Geneva', 'Davos'],
-  BE: ['Belgium', 'Belgian', 'Brussels'],
-  PT: ['Portugal', 'Portuguese', 'Lisbon'],
-  GR: ['Greece', 'Greek', 'Athens'],
-  AE: ['UAE', 'United Arab Emirates', 'Dubai', 'Abu Dhabi', 'Emirati'],
-  IR: ['Iran', 'Iranian', 'Tehran'],
-  IQ: ['Iraq', 'Iraqi', 'Baghdad'],
-  SG: ['Singapore', 'Singaporean'],
-  MY: ['Malaysia', 'Malaysian', 'Kuala Lumpur'],
-  TH: ['Thailand', 'Thai', 'Bangkok'],
-  PH: ['Philippines', 'Filipino', 'Manila'],
-  VN: ['Vietnam', 'Vietnamese', 'Hanoi', 'Ho Chi Minh'],
-  BD: ['Bangladesh', 'Bangladeshi', 'Dhaka'],
-  KE: ['Kenya', 'Kenyan', 'Nairobi'],
-  ET: ['Ethiopia', 'Ethiopian', 'Addis Ababa'],
-  GH: ['Ghana', 'Ghanaian', 'Accra'],
-  CO: ['Colombia', 'Colombian', 'Bogota'],
-  CL: ['Chile', 'Chilean', 'Santiago'],
-  AT: ['Austria', 'Austrian', 'Vienna'],
-  CZ: ['Czech', 'Czechia', 'Prague'],
-  HU: ['Hungary', 'Hungarian', 'Budapest', 'Orban'],
+/**
+ * Wires and national outlets whose Google News results we trust.
+ * Without this, recency alone floated things like a rugby streaming guide
+ * above a Reuters piece on Lebanon's power grid.
+ */
+const REPUTABLE = new Set([
+  'reuters', 'associated press', 'ap news', 'afp', 'agence france-presse',
+  'bloomberg', 'cnbc', 'financial times', 'the economist', 'wall street journal',
+  'bbc', 'bbc news', 'the guardian', 'al jazeera', 'the new york times',
+  'new york times', 'the washington post', 'washington post', 'npr', 'cnn',
+  'deutsche welle', 'dw', 'france 24', 'euronews', 'sky news', 'abc news',
+  'politico', 'axios', 'the independent', 'the telegraph', 'time', 'newsweek',
+  'nikkei asia', 'south china morning post', 'the straits times', 'kyodo news',
+  'the times of india', 'the indian express', 'indian express', 'economic times',
+  'business standard', 'hindustan times', 'the hindu', 'mint', 'ndtv',
+  'the irish times', 'rte', 'the japan times', 'the moscow times', 'haaretz',
+  'the jerusalem post', 'arab news', 'the national', 'middle east eye',
+  'anadolu agency', 'the korea herald', 'yonhap', 'abc.net.au',
+  'the sydney morning herald', 'stuff', 'nz herald', 'the age', 'scmp',
+])
+
+/**
+ * Share of letters that are Latin. Google News search returns foreign-language
+ * items (a Mongolia query surfaced a Chinese-language government page); this is
+ * an English-language product, so those get dropped.
+ */
+function latinRatio(text: string): number {
+  const letters = text.match(/\p{L}/gu)
+  if (!letters || letters.length === 0) return 1
+  const latin = text.match(/\p{Script=Latin}/gu)?.length ?? 0
+  return latin / letters.length
+}
+
+/**
+ * Higher scores surface first, with publish time breaking ties. Pure recency
+ * ranked trivia above substantive reporting once Google News widened the net.
+ */
+function relevanceScore(a: Article, countryCode: string): number {
+  let score = 0
+  if (a.source !== 'Google News' && !a.viaSearch) score += 4
+  if (REPUTABLE.has(a.source.trim().toLowerCase())) score += 3
+  if (matchesCountry(a.headline, countryCode)) score += 2
+  return score
 }
 
 export interface Article {
@@ -132,6 +192,8 @@ export interface Article {
   segment: Segment
   /** Country code this article's source desk inherently covers, if any. */
   impliedCountry?: string
+  /** True when the item came from the Google News search rather than a curated feed. */
+  viaSearch?: boolean
 }
 
 const NAMED_ENTITIES: Record<string, string> = {
@@ -151,12 +213,6 @@ export function cleanText(input: unknown): string {
   return str.replace(/\s+/g, ' ').trim()
 }
 
-export function matchesCountry(text: string, countryCode: string): boolean {
-  const aliases = COUNTRY_ALIASES[countryCode.toUpperCase()] || []
-  const lower = text.toLowerCase()
-  return aliases.some(a => lower.includes(a.toLowerCase()))
-}
-
 interface RSSItem {
   title?: unknown
   description?: unknown
@@ -170,6 +226,24 @@ interface RSSItem {
   'media:content'?: { '@_url'?: string } | { '@_url'?: string }[]
   'media:thumbnail'?: { '@_url'?: string } | { '@_url'?: string }[]
   'content:encoded'?: string
+  source?: unknown
+}
+
+/** Google News appends " - Publisher" to every title; strip it once known. */
+function stripSourceSuffix(title: string, source: string): string {
+  if (!source) return title
+  const suffix = ` - ${source}`
+  return title.endsWith(suffix) ? title.slice(0, -suffix.length).trim() : title
+}
+
+function itemSource(item: RSSItem): string {
+  const s = item.source
+  if (typeof s === 'string') return cleanText(s)
+  if (s && typeof s === 'object') {
+    const v = s as Record<string, unknown>
+    return cleanText(v['#text'] ?? v['@_url'] ?? '')
+  }
+  return ''
 }
 
 function pickDate(item: RSSItem): string {
@@ -223,17 +297,22 @@ async function fetchFeed(feed: Feed, segment: Segment): Promise<Article[]> {
     const raw = parsed?.rss?.channel?.item ?? parsed?.feed?.entry ?? []
     const items: RSSItem[] = Array.isArray(raw) ? raw : [raw]
 
-    return items.map((item, i): Article => ({
-      id: `${feed.source}-${segment}-${i}`,
-      headline: cleanText(item.title),
-      description: cleanText(item.description ?? item.summary).slice(0, 180),
-      source: feed.source,
-      url: pickLink(item) || '#',
-      publishedAt: pickDate(item),
-      imageUrl: extractImage(item),
-      segment,
-      impliedCountry: feed.implies,
-    })).filter(a => a.headline && a.url !== '#')
+    return items.map((item, i): Article => {
+      const source = feed.dynamicSource ? (itemSource(item) || feed.source) : feed.source
+      const rawTitle = cleanText(item.title)
+      return {
+        id: `${source}-${segment}-${i}`,
+        headline: feed.dynamicSource ? stripSourceSuffix(rawTitle, source) : rawTitle,
+        description: cleanText(item.description ?? item.summary).slice(0, 180),
+        source,
+        url: pickLink(item) || '#',
+        publishedAt: pickDate(item),
+        imageUrl: extractImage(item),
+        segment,
+        impliedCountry: feed.implies,
+        viaSearch: feed.dynamicSource === true,
+      }
+    }).filter(a => a.headline && a.url !== '#')
   } catch {
     return []
   }
@@ -257,7 +336,15 @@ export async function getSegmentNews(
   segment: Segment,
   limit = 12,
 ): Promise<SegmentResult> {
-  const feeds = RSS_FEEDS[segment] ?? RSS_FEEDS.headline
+  const curated = RSS_FEEDS[segment] ?? RSS_FEEDS.headline
+  const country = getCountryByCode(countryCode.toUpperCase())
+
+  // Curated newsrooms give depth for the big markets; the Google News search
+  // gives any country a floor of coverage. Both go through the same filter.
+  const feeds: Feed[] = country
+    ? [...curated, googleNewsFeed(country.name, segment)]
+    : curated
+
   const all = (await Promise.all(feeds.map(f => fetchFeed(f, segment)))).flat()
 
   const code = countryCode.toUpperCase()
@@ -273,18 +360,26 @@ export async function getSegmentNews(
     return true
   })
 
-  const newestFirst = [...deduped].sort(
-    (a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0)
+  // Drop non-English items the search surfaces for smaller countries — both
+  // foreign-language headlines and publishers we can't render legibly.
+  const english = deduped.filter(
+    a => latinRatio(a.headline) >= 0.6 && latinRatio(a.source) >= 0.6,
   )
 
+  const ranked = [...english].sort((a, b) => {
+    const diff = relevanceScore(b, code) - relevanceScore(a, code)
+    if (diff !== 0) return diff
+    return (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0)
+  })
+
   const cutoff = Date.now() - MAX_AGE_DAYS * 86_400_000
-  const fresh = newestFirst.filter(a => {
+  const fresh = ranked.filter(a => {
     const t = Date.parse(a.publishedAt)
     return Number.isNaN(t) ? false : t >= cutoff
   })
 
-  // Prefer fresh items; fall back to newest-available so a quiet country isn't blank.
-  const chosen = fresh.length > 0 ? fresh : newestFirst
+  // Prefer fresh items; fall back to best-available so a quiet country isn't blank.
+  const chosen = fresh.length > 0 ? fresh : ranked
 
   return { articles: chosen.slice(0, limit), fetchedAt: new Date().toISOString() }
 }

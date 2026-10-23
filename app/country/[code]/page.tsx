@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
-import { ArrowLeft, Newspaper } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Newspaper } from 'lucide-react'
 import { COUNTRIES, getCountryByCode, getCountryZoom } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
 import { getSegmentNews, REVALIDATE_SECONDS } from '@/lib/news'
@@ -37,10 +37,17 @@ export default async function CountryPage(
   const country = getCountryByCode(code.toUpperCase())
   if (!country) notFound()
 
+  /**
+   * With 10 newsrooms a section can run to dozens of stories, which buried the
+   * page. Each section now previews the 5 most recent and links to its own
+   * page for the rest. We still fetch a deeper slice so the "see all" count
+   * reflects what's actually there.
+   */
+  const PREVIEW = 5
   const results = await Promise.all(
     SEGMENTS.map(async seg => ({
       meta: seg,
-      ...(await getSegmentNews(country.code, seg.id, 9)),
+      ...(await getSegmentNews(country.code, seg.id, 40)),
     })),
   )
 
@@ -163,13 +170,31 @@ export default async function CountryPage(
                 width: '4px', height: '20px', borderRadius: '2px',
                 background: meta.color, alignSelf: 'center',
               }} />
-              <h2 className="heading-md">{meta.label}</h2>
+              <Link
+                href={`/country/${country.code}/${meta.id}`}
+                className="section-title"
+                style={{ textDecoration: 'none' }}
+              >
+                <h2 className="heading-md">{meta.label}</h2>
+              </Link>
               <span style={{ fontSize: '13.5px', fontWeight: 450, color: 'var(--text-3)' }}>
                 {meta.blurb}
               </span>
-              <span className="mono-meta" style={{ marginLeft: 'auto', color: 'var(--text-4)' }}>
-                {articles.length}
-              </span>
+              {articles.length > PREVIEW && (
+                <Link
+                  href={`/country/${country.code}/${meta.id}`}
+                  style={{
+                    marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    padding: '7px 13px', borderRadius: '999px',
+                    border: '1px solid var(--border-mid)', background: 'var(--surface-1)',
+                    fontSize: '13px', fontWeight: 600, color: 'var(--text-2)',
+                    textDecoration: 'none', whiteSpace: 'nowrap',
+                  }}
+                >
+                  See all {articles.length}
+                  <ArrowRight size={14} strokeWidth={2.5} />
+                </Link>
+              )}
             </div>
 
             {articles.length === 0 ? (
@@ -193,7 +218,7 @@ export default async function CountryPage(
                 gridTemplateColumns: 'repeat(auto-fill, minmax(275px, 1fr))',
                 gap: '15px',
               }}>
-                {articles.map(a => (
+                {articles.slice(0, PREVIEW).map(a => (
                   <NewsCard key={`${a.source}-${a.url}`} article={a} color={meta.color} />
                 ))}
               </div>
