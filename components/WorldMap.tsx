@@ -9,7 +9,7 @@ const SEGMENT_COLOR = Object.fromEntries(
   SEGMENTS.map(s => [s.id, s.color]),
 ) as Record<Segment, string>
 
-const IDLE_COLOR = '#4C4C5E'
+const IDLE_COLOR = '#6B7389'
 
 /** Dark map styling — softened from the old high-contrast cyberpunk preset. */
 const DARK_STYLE: google.maps.MapTypeStyle[] = [
@@ -61,7 +61,7 @@ export default function WorldMap() {
           const seg = (entry as { segment?: Segment } | null)?.segment
           const color = seg ? SEGMENT_COLOR[seg] ?? IDLE_COLOR : IDLE_COLOR
           els.dot.style.background = color
-          els.dot.style.boxShadow = `0 0 8px ${color}`
+          els.dot.style.boxShadow = `0 0 0 1px rgba(255,255,255,.16), 0 0 8px ${color}, 0 0 20px ${color}99`
           els.ring.style.borderColor = color
         }
       } catch { /* keep last known colours */ }
@@ -89,7 +89,7 @@ export default function WorldMap() {
 
       COUNTRIES.forEach(country => {
         const el = document.createElement('div')
-        el.style.cssText = 'width:22px;height:22px;position:relative;cursor:pointer;'
+        el.style.cssText = 'width:24px;height:24px;position:relative;cursor:pointer;'
         el.setAttribute('role', 'button')
         el.setAttribute('tabindex', '0')
         el.setAttribute('aria-label', `${country.name} — open news`)
@@ -97,18 +97,18 @@ export default function WorldMap() {
         const ring = document.createElement('div')
         ring.className = 'bubble-ring'
         ring.style.cssText = `
-          width:22px;height:22px;border-radius:50%;
-          border:1px solid ${IDLE_COLOR};
+          width:24px;height:24px;border-radius:50%;
+          border:1.5px solid ${IDLE_COLOR};
           position:absolute;top:0;left:0;
           transition:border-color .5s ease;
         `
         const dot = document.createElement('div')
         dot.style.cssText = `
-          width:7px;height:7px;border-radius:50%;
+          width:8px;height:8px;border-radius:50%;
           background:${IDLE_COLOR};
           position:absolute;top:50%;left:50%;
           transform:translate(-50%,-50%);
-          box-shadow:0 0 8px ${IDLE_COLOR};
+          box-shadow:0 0 0 1px rgba(255,255,255,.16), 0 0 8px ${IDLE_COLOR}, 0 0 18px ${IDLE_COLOR}88;
           z-index:2;
           transition:background .5s ease,box-shadow .5s ease,transform .18s ease;
         `
@@ -152,8 +152,8 @@ export default function WorldMap() {
           const pos = proj.fromLatLngToDivPixel(new google.maps.LatLng(country.lat, country.lng))
           if (pos) {
             el.style.position = 'absolute'
-            el.style.left = `${pos.x - 11}px`
-            el.style.top = `${pos.y - 11}px`
+            el.style.left = `${pos.x - 12}px`
+            el.style.top = `${pos.y - 12}px`
           }
         }
         overlay.onRemove = function () { el.parentNode?.removeChild(el) }

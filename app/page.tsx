@@ -24,15 +24,20 @@ export default function Landing() {
       position: 'relative', overflow: 'hidden',
       display: 'flex', flexDirection: 'column',
     }}>
-      {/* Backdrop map */}
-      <div style={{ position: 'absolute', inset: 0, opacity: .5 }}>
+      {/* Backdrop map — near full strength so the world and its pulses read */}
+      <div style={{ position: 'absolute', inset: 0, opacity: .95 }}>
         <MiniMap />
       </div>
-      <div className="dot-grid" style={{ position: 'absolute', inset: 0, opacity: .35, pointerEvents: 'none' }} />
-      {/* Soft vignette — replaces the old hard cyan radial burst */}
+      <div className="dot-grid" style={{ position: 'absolute', inset: 0, opacity: .18, pointerEvents: 'none' }} />
+      {/* Vignette: just enough to seat the copy, not enough to erase the map */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'radial-gradient(ellipse 75% 60% at 50% 38%, rgba(8,8,12,.55) 0%, rgba(8,8,12,.88) 62%, var(--bg) 100%)',
+        background: 'radial-gradient(ellipse 54% 44% at 50% 46%, rgba(8,8,12,.68) 0%, rgba(8,8,12,.40) 46%, rgba(8,8,12,.14) 72%, transparent 90%)',
+      }} />
+      {/* Edge falloff so bubbles never collide with the nav or stats strip */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: 'linear-gradient(to bottom, rgba(8,8,12,.92) 0%, transparent 16%, transparent 80%, rgba(8,8,12,.95) 100%)',
       }} />
 
       {/* ── NAV ── */}
