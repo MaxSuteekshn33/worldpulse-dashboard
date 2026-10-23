@@ -165,6 +165,20 @@ button:active, [role="button"]:active { opacity: .85; }
   box-shadow: var(--shadow-md);
 }
 
+/* ── Dashboard CTA panel ──────────────────────────────────── */
+/* Transitions stay off until the stored open/collapsed state has been painted
+   once. The server can't read the store, so its HTML is always the collapsed
+   panel; with transitions live from the start, everyone who left the panel
+   open watched it slide in again on every load. CountryPanel adds .cta-ready a
+   frame after mount, so the remembered state is simply there and only the
+   viewer's own toggles animate. */
+.cta-slide { transition: none; }
+.cta-ready .cta-slide {
+  transition: transform .34s cubic-bezier(.2,.8,.2,1),
+              opacity .26s ease,
+              visibility .34s;
+}
+
 /* ── Pulse bubble ─────────────────────────────────────────── */
 /* Keeps the ring centred on its marker: the element is placed with a
    translate(-50%,-50%), and a bare `transform: scale()` here would replace that

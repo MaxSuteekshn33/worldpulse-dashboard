@@ -112,9 +112,27 @@ collapsed by default to a labelled rectangle.
 
 It was a centred hero, which put the product's own copy over the middle of the
 map, the part people came to look at, and left nowhere on the screen to put
-anything else. Collapsed-by-default means the map is unobstructed rather than
-merely less obstructed, and the middle is free for whatever the dashboard grows
-next.
+anything else. The middle is now free for whatever the dashboard grows next.
+
+**It opens on a first visit and remembers the choice after that**, so nobody
+has to discover the search behind a button, and nobody who collapses it has to
+collapse it again. The preference lives in `localStorage` and is read through
+`useSyncExternalStore` — the same shape `lib/useMediaQuery.ts` uses, and for
+the same reason: the real value lives outside React and can't be read on the
+server, so it needs a server snapshot rather than a state update fired from an
+effect. Every access is wrapped, because the store throws in private mode and
+an unreadable store should just look like a first visit.
+
+Two consequences of the server not being able to read that store:
+
+- The server's HTML always shows the collapsed panel, so with transitions live
+  from the start everyone who left it open watched it slide in again on every
+  load. The `.cta-slide` / `.cta-ready` pair in `globals.css` keeps transitions
+  off until the restored state has been painted once; the class is added to the
+  node a frame after mount, so restoring a preference costs no render and only
+  the viewer's own toggles animate.
+- The search is focused only when the viewer opened the panel themselves. A
+  panel restored from a previous visit must not grab focus on load.
 
 Both states stay mounted and cross-slide. The hidden one is `visibility:
 hidden`, which also takes its input and links out of the tab order, so there is

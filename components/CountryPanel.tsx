@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import CountrySearch from '@/components/CountrySearch'
@@ -19,21 +19,78 @@ import { useIsCompact } from '@/lib/useMediaQuery'
  * hidden`, which takes its input and links out of the tab order too, so there
  * is never a focusable control behind the one that is showing.
  */
+const STORAGE_KEY = 'worldpulse:country-panel'
+
+/**
+ * Whether the panel is open, stored per browser.
+ *
+ * Kept as an external store read through `useSyncExternalStore` — the same
+ * shape `lib/useMediaQuery.ts` uses, and for the same reason: the real value
+ * lives outside React and cannot be read on the server, so it needs a server
+ * snapshot rather than a state update fired from an effect.
+ */
+const listeners = new Set<() => void>()
+
+function subscribePanel(onChange: () => void) {
+  listeners.add(onChange)
+  // `storage` fires in the OTHER tabs, so a choice made in one follows along.
+  window.addEventListener('storage', onChange)
+  return () => {
+    listeners.delete(onChange)
+    window.removeEventListener('storage', onChange)
+  }
+}
+
+/** No stored choice means a first visit, and a first visit opens. */
+function readPanel(): boolean {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    return stored === null ? true : stored === 'open'
+  } catch {
+    return true // private mode, blocked site data: treat it as a first visit
+  }
+}
+
+/** Collapsed on the server — the only honest answer before the store is readable. */
+function serverPanel(): boolean {
+  return false
+}
+
+function writePanel(next: boolean) {
+  try {
+    localStorage.setItem(STORAGE_KEY, next ? 'open' : 'collapsed')
+  } catch { /* unwritable store: the panel still toggles for this page view */ }
+  for (const l of listeners) l()
+}
+
 export default function CountryPanel() {
-  const [open, setOpen] = useState(false)
+  const open = useSyncExternalStore(subscribePanel, readPanel, serverPanel)
+  const [openedByUser, setOpenedByUser] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
   const isCompact = useIsCompact()
   const navHeight = 56
+
+  // Lets the slide animate only from here on. Done as a class on the node
+  // rather than as state, so restoring the stored choice never costs a render.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => rootRef.current?.classList.add('cta-ready'))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
+  /** Remembers the choice, so the panel reopens the way the viewer left it. */
+  function setPanel(next: boolean) {
+    setOpenedByUser(next)
+    writePanel(next)
+  }
 
   // Escape closes it. Deliberately no click-outside: the surface behind this
   // panel is a draggable map, and ending a pan over the map would snap it shut.
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPanel(false) }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
-
-  const slide = 'transform .34s cubic-bezier(.2,.8,.2,1), opacity .26s ease, visibility .34s'
 
   /** Only as dark as the state needs: a whole-flank wash would waste the map. */
   const scrim = isCompact
@@ -55,7 +112,7 @@ export default function CountryPanel() {
         }}
       />
 
-      <div style={{
+      <div ref={rootRef} style={{
         position: 'absolute', zIndex: 200,
         top: `calc(${navHeight}px + var(--safe-top) + ${isCompact ? '14px' : '42px'})`,
         left: isCompact ? '16px' : 'calc(26px + var(--safe-left))',
@@ -65,8 +122,9 @@ export default function CountryPanel() {
         {/* ── COLLAPSED: the rectangle that says what is behind it ── */}
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => setPanel(true)}
           aria-expanded={false}
+          className="cta-slide"
           style={{
             position: 'absolute', top: 0, left: 0,
             width: '100%', display: 'flex', alignItems: 'center', gap: '13px',
@@ -77,7 +135,6 @@ export default function CountryPanel() {
             transform: open ? 'translateX(-118%)' : 'translateX(0)',
             opacity: open ? 0 : 1,
             visibility: open ? 'hidden' : 'visible',
-            transition: slide,
           }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-line)' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-mid)' }}
@@ -112,6 +169,7 @@ export default function CountryPanel() {
 
         {/* ── EXPANDED: the full call to action ── */}
         <div
+          className="cta-slide"
           style={{
             padding: isCompact ? '18px 18px 20px' : '22px 22px 24px',
             borderRadius: '18px',
@@ -124,7 +182,6 @@ export default function CountryPanel() {
             transform: open ? 'translateX(0)' : 'translateX(-118%)',
             opacity: open ? 1 : 0,
             visibility: open ? 'visible' : 'hidden',
-            transition: slide,
           }}
         >
           <div style={{
@@ -136,7 +193,7 @@ export default function CountryPanel() {
             </span>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => setPanel(false)}
               aria-label="Collapse country news"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
@@ -165,11 +222,13 @@ export default function CountryPanel() {
             refreshed every 20 minutes.
           </p>
 
-          {/* Remounted on toggle so opening lands the caret in an empty field. */}
+          {/* Remounted on toggle so opening lands the caret in an empty field —
+              but only focused when the viewer opened it themselves. A panel
+              restored from a previous visit must not grab focus on load. */}
           <CountrySearch
             key={open ? 'open' : 'closed'}
             size="hero"
-            autoFocus={open && !isCompact}
+            autoFocus={open && openedByUser && !isCompact}
           />
 
           <div style={{
