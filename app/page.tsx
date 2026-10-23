@@ -1,23 +1,17 @@
 'use client'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { useEffect, useState } from 'react'
 import { ArrowRight } from 'lucide-react'
 import CountrySearch from '@/components/CountrySearch'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
+import { SOURCE_COUNT } from '@/lib/sources'
 import { useIsCompact } from '@/lib/useMediaQuery'
 
 const MiniMap = dynamic(() => import('@/components/MiniMap'), { ssr: false })
 
 export default function Landing() {
   const isCompact = useIsCompact()
-  const [sources, setSources] = useState<number | null>(null)
-
-  useEffect(() => {
-    fetch('/api/meta').then(r => r.json()).then(d => setSources(d.sources ?? null)).catch(() => {})
-  }, [])
-
   return (
     <main style={{
       minHeight: '100dvh', background: 'var(--bg)',
@@ -152,7 +146,7 @@ export default function Landing() {
       }}>
         {[
           { v: String(COUNTRIES.length), l: 'Countries' },
-          { v: sources ? String(sources) : '—', l: 'Newsrooms' },
+          { v: String(SOURCE_COUNT), l: 'Newsrooms' },
           { v: String(SEGMENTS.length), l: 'Categories' },
           { v: '20', l: 'Min refresh' },
         ].map(({ v, l }) => (

@@ -1,10 +1,11 @@
 'use client'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import CountrySearch from '@/components/CountrySearch'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
+import { SOURCE_COUNT } from '@/lib/sources'
 import { useIsCompact } from '@/lib/useMediaQuery'
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false })
@@ -27,19 +28,11 @@ function Stat({ value, label }: { value: string; label: string }) {
 
 export default function Dashboard() {
   const isCompact = useIsCompact()
-  const [sourceCount, setSourceCount] = useState<number | null>(null)
   const navHeight = 56
 
   useEffect(() => {
     document.body.classList.add('lock-scroll')
     return () => { document.body.classList.remove('lock-scroll') }
-  }, [])
-
-  useEffect(() => {
-    fetch('/api/meta')
-      .then(r => r.json())
-      .then(d => setSourceCount(d.sources ?? null))
-      .catch(() => {})
   }, [])
 
   return (
@@ -181,7 +174,7 @@ export default function Dashboard() {
         flexWrap: 'wrap',
       }}>
         <Stat value={String(COUNTRIES.length)} label="Countries" />
-        <Stat value={sourceCount ? String(sourceCount) : '—'} label="Newsrooms" />
+        <Stat value={String(SOURCE_COUNT)} label="Newsrooms" />
         <Stat value={String(SEGMENTS.length)} label="Categories" />
 
         {/* Legend */}

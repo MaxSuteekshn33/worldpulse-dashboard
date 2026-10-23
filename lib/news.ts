@@ -48,6 +48,11 @@ export const RSS_FEEDS: Record<Segment, Feed[]> = {
     { url: 'https://www.aljazeera.com/xml/rss/all.xml',                  source: 'Al Jazeera' },
     { url: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',  source: 'New York Times' },
     { url: 'https://www.euronews.com/rss',                               source: 'Euronews' },
+    { url: 'https://rss.dw.com/rdf/rss-en-all',                          source: 'Deutsche Welle' },
+    { url: 'https://www.arabnews.com/rss.xml',                           source: 'Arab News' },
+    { url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', source: 'AllAfrica' },
+    { url: 'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml', source: 'Channel News Asia' },
+    { url: 'https://en.mercopress.com/rss/',                             source: 'MercoPress' },
     { url: 'https://www.abc.net.au/news/feed/51120/rss.xml',             source: 'ABC News',       implies: 'AU' },
     { url: 'https://indianexpress.com/section/india/feed/',              source: 'Indian Express', implies: 'IN' },
     { url: 'https://www.business-standard.com/rss/latest.rss',           source: 'Business Standard', implies: 'IN' },
@@ -58,6 +63,10 @@ export const RSS_FEEDS: Record<Segment, Feed[]> = {
     { url: 'https://www.theguardian.com/politics/rss',                   source: 'The Guardian',   implies: 'GB' },
     { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml',  source: 'New York Times', implies: 'US' },
     { url: 'https://www.euronews.com/rss?level=theme&name=news',         source: 'Euronews' },
+    { url: 'https://rss.dw.com/rdf/rss-en-world',                        source: 'Deutsche Welle' },
+    { url: 'https://www.arabnews.com/rss.xml',                           source: 'Arab News' },
+    { url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', source: 'AllAfrica' },
+    { url: 'https://en.mercopress.com/rss/',                             source: 'MercoPress' },
     { url: 'https://indianexpress.com/section/political-pulse/feed/',    source: 'Indian Express', implies: 'IN' },
     { url: 'https://economictimes.indiatimes.com/news/politics-and-nation/rssfeeds/1052732854.cms', source: 'Economic Times', implies: 'IN' },
     { url: 'https://feeds.skynews.com/feeds/rss/politics.xml',           source: 'Sky News',       implies: 'GB' },
@@ -68,6 +77,11 @@ export const RSS_FEEDS: Record<Segment, Feed[]> = {
     { url: 'https://www.aljazeera.com/xml/rss/all.xml',                  source: 'Al Jazeera' },
     { url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',     source: 'New York Times' },
     { url: 'https://www.euronews.com/rss',                               source: 'Euronews' },
+    { url: 'https://rss.dw.com/rdf/rss-en-world',                        source: 'Deutsche Welle' },
+    { url: 'https://www.arabnews.com/rss.xml',                           source: 'Arab News' },
+    { url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', source: 'AllAfrica' },
+    { url: 'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml', source: 'Channel News Asia' },
+    { url: 'https://en.mercopress.com/rss/',                             source: 'MercoPress' },
     { url: 'https://www.abc.net.au/news/feed/45910/rss.xml',             source: 'ABC News' },
     { url: 'https://indianexpress.com/section/world/feed/',              source: 'Indian Express' },
     { url: 'https://feeds.skynews.com/feeds/rss/world.xml',              source: 'Sky News' },
@@ -77,6 +91,9 @@ export const RSS_FEEDS: Record<Segment, Feed[]> = {
     { url: 'https://feeds.bbci.co.uk/news/business/economy/rss.xml',     source: 'BBC' },
     { url: 'https://www.theguardian.com/business/economics/rss',         source: 'The Guardian' },
     { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml',   source: 'New York Times' },
+    { url: 'https://rss.dw.com/rdf/rss-en-bus',                          source: 'Deutsche Welle' },
+    { url: 'https://allafrica.com/tools/headlines/rdf/business/headlines.rdf', source: 'AllAfrica' },
+    { url: 'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml', source: 'Channel News Asia' },
     { url: 'https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms', source: 'Economic Times', implies: 'IN' },
     { url: 'https://www.business-standard.com/rss/economy-102.rss',      source: 'Business Standard', implies: 'IN' },
     { url: 'https://indianexpress.com/section/business/economy/feed/',   source: 'Indian Express', implies: 'IN' },
@@ -87,6 +104,9 @@ export const RSS_FEEDS: Record<Segment, Feed[]> = {
     { url: 'https://feeds.bbci.co.uk/news/business/rss.xml',             source: 'BBC' },
     { url: 'https://www.theguardian.com/uk/business/rss',                source: 'The Guardian',   implies: 'GB' },
     { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',  source: 'New York Times' },
+    { url: 'https://rss.dw.com/rdf/rss-en-bus',                          source: 'Deutsche Welle' },
+    { url: 'https://www.arabnews.com/rss.xml',                           source: 'Arab News' },
+    { url: 'https://allafrica.com/tools/headlines/rdf/business/headlines.rdf', source: 'AllAfrica' },
     { url: 'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms', source: 'Economic Times', implies: 'IN' },
     { url: 'https://www.business-standard.com/rss/markets-106.rss',      source: 'Business Standard', implies: 'IN' },
     { url: 'https://indianexpress.com/section/business/feed/',           source: 'Indian Express', implies: 'IN' },
@@ -130,10 +150,7 @@ export function googleNewsFeed(countryName: string, segment: Segment): Feed {
   return { url, source: 'Google News', dynamicSource: true }
 }
 
-/** Distinct newsroom count, for the dashboard stats strip. */
-export const SOURCE_COUNT = Array.from(
-  new Set(Object.values(RSS_FEEDS).flat().map(f => f.source))
-).length
+export { SOURCE_COUNT } from './sources'
 
 /**
  * Wires and national outlets whose Google News results we trust.
@@ -154,6 +171,8 @@ const REPUTABLE = new Set([
   'the jerusalem post', 'arab news', 'the national', 'middle east eye',
   'anadolu agency', 'the korea herald', 'yonhap', 'abc.net.au',
   'the sydney morning herald', 'stuff', 'nz herald', 'the age', 'scmp',
+  'deutsche welle', 'dw.com', 'arab news', 'allafrica', 'allafrica.com',
+  'channel news asia', 'cna', 'mercopress', 'the africa report',
 ])
 
 /**
@@ -294,7 +313,14 @@ async function fetchFeed(feed: Feed, segment: Segment): Promise<Article[]> {
 
     const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' })
     const parsed = parser.parse(await res.text())
-    const raw = parsed?.rss?.channel?.item ?? parsed?.feed?.entry ?? []
+    // RSS 2.0, Atom, then RSS 1.0 / RDF — Deutsche Welle and Nikkei publish RDF,
+    // where items sit at the document root rather than under a <channel>.
+    const raw =
+      parsed?.rss?.channel?.item ??
+      parsed?.feed?.entry ??
+      parsed?.['rdf:RDF']?.item ??
+      parsed?.RDF?.item ??
+      []
     const items: RSSItem[] = Array.isArray(raw) ? raw : [raw]
 
     return items.map((item, i): Article => {

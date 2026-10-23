@@ -1,6 +1,6 @@
 # WorldPulse — Live News Intelligence
 
-Interactive world news dashboard. Pick any of 100 countries on the map and get a
+Interactive world news dashboard. Pick any of 200 countries and territories and get a
 dedicated page with headlines, politics, world affairs, economy and finance —
 refreshed every 20 minutes.
 
@@ -11,7 +11,7 @@ refreshed every 20 minutes.
 | Route | Type | Purpose |
 |---|---|---|
 | `/` | Static | Landing page with search CTA + coverage stats |
-| `/dashboard` | Static | World map, 100 pulse bubbles, centred country search |
+| `/dashboard` | Static | World map, 200 pulse bubbles, centred country search |
 | `/country/[code]` | ISR (20 min) | Per-country page: map backdrop + 5 sections, 5 stories each |
 | `/country/[code]/[segment]` | ISR (20 min, on-demand) | Every story in one category |
 | `/api/news` | Dynamic | Articles for one country + segment |
@@ -42,11 +42,21 @@ revalidate on the same cadence. Three things keep the deck genuinely fresh:
 
 ### Sources
 
-Ten curated newsrooms: BBC, The Guardian, Al Jazeera, New York Times, Euronews,
-ABC News (Australia), Indian Express, Economic Times, Business Standard, Sky News.
+Fifteen curated newsrooms, chosen for regional spread (`lib/sources.ts`):
 
-Plus a **per-country Google News search** feed, because the curated ten skew
-UK/US/India/Australia — Ireland and Lebanon both returned zero before it.
+| Region | Newsrooms |
+|---|---|
+| Global / UK / US | BBC, The Guardian, New York Times, Sky News |
+| Europe | Euronews, Deutsche Welle |
+| Middle East | Al Jazeera, Arab News |
+| Africa | AllAfrica |
+| Asia | Channel News Asia |
+| Latin America | MercoPress |
+| Australia | ABC News |
+| India | Indian Express, Economic Times, Business Standard |
+
+Plus a **per-country Google News search** feed, because even fifteen newsrooms
+leave the long tail thin — Ireland and Lebanon both returned zero before it.
 It uses the SEARCH endpoint, not the localised edition: Google only publishes
 English editions for some countries and the rest silently fall back to the US
 edition, which injected US stories into unrelated countries' pages.
@@ -63,6 +73,10 @@ headline or publisher is mostly non-Latin are dropped.
 > - **Business Standard** topic feeds (`world-news`, `international`,
 >   `current-affairs`) — frozen in 2023. Only `latest.rss`, `economy-102` and
 >   `markets-106` are live.
+> - **Reuters** (`feeds.reuters.com/*`) — refuses connections.
+
+Deutsche Welle and Nikkei publish RSS 1.0 / RDF, where items sit at the document
+root instead of under `<channel>`; the parser handles all three shapes.
 
 Feeds that are inherently about one country (a national politics or business desk)
 carry an `implies` code. A story on the Indian Express politics desk rarely contains
@@ -70,13 +84,21 @@ the word "India", so alias matching alone discarded most of them.
 
 ### Country matching
 
-`lib/aliases.ts` holds match terms for all 100 countries. Matching is
+`lib/aliases.ts` holds match terms for all 200 countries. Matching is
 **word-bounded, not substring** — naive `includes()` produced real false
 positives at this scale ("Oman" inside "Romania"/"woman", "Mali" inside
 "Somalia", "India" inside "Indiana", "US" inside "told us"). Because boundaries
 are enforced, inflected forms no longer match implicitly, so every demonym is
 listed explicitly ("India" will NOT match "Indian"). Short acronyms that collide
 with ordinary words (`US`, `UK`, `UAE`, `DRC`) are matched case-sensitively.
+
+Word boundaries alone cannot separate names nested inside other names, so
+`excludes` handles those: "Guinea" sits inside "Equatorial Guinea" and "Papua
+New Guinea", "Sudan" inside "South Sudan", "Ireland" inside "Northern Ireland",
+"Mexico" inside "New Mexico", "Niger" inside "Niger Delta".
+
+A regression test walks all 200 x 199 country pairs and asserts no country's
+name matches another country's matcher.
 
 ## Local development
 
