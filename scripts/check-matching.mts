@@ -73,6 +73,11 @@ const traps: [string, string, boolean][] = [
   ['Fighting continues in Somalia', 'ML', false],
   ['A factory in Indiana reopened', 'IN', false],
   ['He told us the deal was off', 'US', false],
+  // A price is not a place. Found on the live landing page, where "Apple's
+  // foldable iPhone hits stores with US$2,399" was filed under United States.
+  ['Apple\u2019s foldable iPhone hits stores with US$2,399', 'US', false],
+  ['Exports reached USD 4.1 billion last quarter', 'US', false],
+  ['The US said the US$2bn deal would proceed', 'US', true],
   ['Nigeria raised fuel prices', 'NE', false],
   ['A new plan for New Mexico', 'MX', false],
   // Nested names must not swallow the shorter country.

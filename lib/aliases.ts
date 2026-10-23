@@ -208,7 +208,11 @@ export const COUNTRY_TERMS: Record<string, CountryTerms> = {
   VC: { terms: ["Saint Vincent and the Grenadines", "Kingstown"] },
   SR: { terms: ["Suriname", "Surinamese", "Paramaribo"] },
   TT: { terms: ["Trinidad and Tobago", "Trinidadian", "Port of Spain"] },
-  US: { terms: ["United States", "American", "Washington", "America", "Americans", "White House", "Pentagon", "Trump", "Biden"], acronyms: ["US", "U.S.", "USA"] },
+  // "US$" is a currency, not a country: the acronym matcher stops at the
+  // non-letter "$", so an Asian or African outlet pricing something in US
+  // dollars filed the story under the United States. Scrubbing the currency
+  // first leaves a genuine "US" elsewhere in the sentence still matching.
+  US: { terms: ["United States", "American", "Washington", "America", "Americans", "White House", "Pentagon", "Trump", "Biden"], acronyms: ["US", "U.S.", "USA"], excludes: ["US$", "USD"] },
   UY: { terms: ["Uruguay", "Uruguayan", "Montevideo"] },
   VE: { terms: ["Venezuela", "Venezuelan", "Caracas", "Maduro"] },
   AU: { terms: ["Australia", "Australian", "Canberra", "Australians", "Sydney", "Melbourne", "Brisbane", "Perth", "Albanese"] },
