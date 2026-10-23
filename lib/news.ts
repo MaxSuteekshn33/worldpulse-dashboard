@@ -736,6 +736,75 @@ export interface PulseEntry {
 }
 
 /**
+ * How many countries one batched pulse request may cover.
+ *
+ * Each code costs one Google News search, so this is the knob that keeps the
+ * map's long-tail fill under the rate limit. Google answers a burst of this
+ * size happily and starts returning 302s to /sorry/ long before a request of
+ * ten times it would finish.
+ */
+export const PULSE_BATCH = 12
+
+/**
+ * Pulse for countries the curated wires don't reach, read from the same
+ * per-country search the country pages use.
+ *
+ * Without this the map contradicted the product: Luxembourg's page carried 24
+ * stories while its bubble sat grey, and so did 98 others. The cause was that
+ * getPulseMap below reads ONLY the 15 curated newsrooms, while a country page
+ * reads those plus the per-country search — which is the very thing that gives
+ * the long tail its coverage. Half the world was reported as quiet because the
+ * map was looking at a narrower feed set than the pages it links to.
+ *
+ * One search per country, not one per section: the single unsegmented query is
+ * the broadest net, and the returned stories are sorted into sections with
+ * topicKey — the same vocabulary the pages file by, so the bubble's colour and
+ * the page's sections now come from one classifier instead of two.
+ */
+export async function getSearchPulse(
+  codes: string[],
+): Promise<Record<string, PulseEntry | null>> {
+  const entries = await Promise.all(
+    codes.slice(0, PULSE_BATCH).map(async (code): Promise<[string, PulseEntry | null]> => {
+      const country = getCountryByCode(code.toUpperCase())
+      if (!country) return [code, null]
+
+      const items = await fetchFeed(googleNewsFeed(country.name, 'headline'), 'headline')
+
+      const matched = items.filter(
+        a =>
+          matchesCountry(`${a.headline} ${a.description}`, country.code) &&
+          latinRatio(a.headline) >= 0.6 &&
+          latinRatio(a.source) >= 0.6 &&
+          !/\.gov(\.[a-z]{2})?$/i.test(a.source.trim()),
+      )
+      if (matched.length === 0) return [country.code, null]
+
+      const counts = new Map<Segment, number>()
+      for (const a of matched) {
+        const key = topicKey(a)
+        // Anything no section's vocabulary claims is a top story, not a gap.
+        const segment = (key === 'general' ? 'headline' : key) as Segment
+        counts.set(segment, (counts.get(segment) ?? 0) + 1)
+      }
+
+      let best: Segment = 'headline'
+      let bestCount = 0
+      for (const [segment, n] of counts) {
+        if (n > bestCount) {
+          best = segment
+          bestCount = n
+        }
+      }
+
+      return [country.code, { segment: best, count: bestCount, total: matched.length }]
+    }),
+  )
+
+  return Object.fromEntries(entries)
+}
+
+/**
  * Dominant segment per country, computed in a single pass.
  *
  * The map used to call /api/news once per country per segment — 49 × 5 = 245

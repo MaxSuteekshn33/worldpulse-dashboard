@@ -105,6 +105,37 @@ bare heading.
 
 Repeated story links on a rendered country page: 3–4 → 0.
 
+## The map and the pages agree
+
+The dashboard's bubbles come from `/api/pulse`, and that endpoint used to read
+only the 15 curated newsrooms — while a country page reads those **plus** the
+per-country Google News search. The search is the thing that gives the long
+tail its coverage, so the map was looking at a narrower feed set than the pages
+it links to, and reported half the world as quiet. Luxembourg's page carried 24
+stories while its bubble sat grey, and so did 98 others.
+
+Asking for all 200 searches in one request is what made that look like a
+necessary trade-off: Google refuses a burst that size outright (see the
+rate-limit note below). So the work is split by cost.
+
+| Request | Covers | Cost |
+|---|---|---|
+| `/api/pulse` | all 200, scored against the curated wires | one set of feed fetches |
+| `/api/pulse?codes=…` | up to `PULSE_BATCH` (12) countries, from the per-country search | one search per country |
+
+The map makes the bare call, paints what comes back, then asks for the
+countries that came back quiet in batches of 12 — about nine follow-up requests,
+run one after another rather than at once. Each is cached server-side for the
+usual 20 minutes, so the fill is paid for once and the next visitor gets it
+warm. The route reports its own `batchSize` rather than the client hard-coding
+it, because `WorldMap` is a client component and importing `lib/news.ts` for one
+number would drag the whole news engine into the browser bundle.
+
+The long-tail pulse runs **one** search per country, not one per section: the
+unsegmented query is the broadest net, and the stories that come back are sorted
+with `topicKey` — the same vocabulary the country pages file by. So a bubble's
+colour and the sections behind it now come from one classifier instead of two.
+
 ## Why only five countries are prerendered
 
 `generateStaticParams` returns `FEATURED_CODES`, not all 200. Building every

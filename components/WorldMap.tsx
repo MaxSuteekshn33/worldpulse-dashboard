@@ -106,7 +106,40 @@ export default function WorldMap() {
     let refreshTimer: ReturnType<typeof setInterval> | undefined
     let cancelled = false
 
-    /** One request for every country, then recolour each bubble. */
+    /** Repaints every bubble the response mentions. */
+    function apply(pulse: Record<string, unknown>) {
+      for (const [code, entry] of Object.entries(pulse)) {
+        const els = markersRef.current.get(code)
+        if (els) paint(els, entry as PulseEntry | null)
+      }
+    }
+
+    /**
+     * Second pass, for the countries the curated wires don't reach.
+     *
+     * These used to stay grey for good: the pulse read only the 15 curated
+     * newsrooms while the country pages read those plus a per-country search,
+     * so the map called half the world quiet while the pages behind those
+     * bubbles were full. Asking for all of them at once is what made that
+     * trade-off look necessary — Google refuses a 200-wide burst of searches
+     * outright. In batches it answers, each batch is cached server-side for
+     * the usual 20 minutes, and the map fills in as they land.
+     */
+    async function fillQuiet(codes: string[], batchSize: number) {
+      for (let i = 0; i < codes.length; i += batchSize) {
+        if (cancelled) return
+        try {
+          const batch = codes.slice(i, i + batchSize)
+          const res = await fetch(`/api/pulse?codes=${batch.join(',')}`)
+          if (!res.ok) continue
+          const data = await res.json()
+          if (cancelled) return
+          apply(data.pulse ?? {})
+        } catch { /* leave this batch as it is and keep going */ }
+      }
+    }
+
+    /** One request for the wire-covered half, then the long tail in batches. */
     async function refreshPulse() {
       try {
         const res = await fetch('/api/pulse')
@@ -114,10 +147,11 @@ export default function WorldMap() {
         const data = await res.json()
         if (cancelled) return
 
-        for (const [code, entry] of Object.entries(data.pulse ?? {})) {
-          const els = markersRef.current.get(code)
-          if (els) paint(els, entry as PulseEntry | null)
-        }
+        const pulse: Record<string, unknown> = data.pulse ?? {}
+        apply(pulse)
+
+        const quiet = Object.keys(pulse).filter(code => !pulse[code])
+        if (quiet.length > 0) await fillQuiet(quiet, data.batchSize ?? 10)
       } catch { /* keep last known colours */ }
     }
 
