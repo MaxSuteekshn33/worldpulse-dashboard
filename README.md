@@ -271,6 +271,26 @@ a narrow wash along the left edge when collapsed, wider and darker when open.
 The scrim used to be a radial centred on the hero, which darkened the middle of
 the map for copy that no longer sits there.
 
+## The map is one tab stop
+
+Every marker used to carry `tabindex="0"`, so a keyboard user tabbed through
+**200 bubbles** before reaching anything below the map. The dashboard had around
+215 tab stops; it now has 16.
+
+It works the way a composite widget should: exactly one marker is reachable by
+Tab (a roving tabindex), and arrow keys move within the map to the nearest
+country **in that direction** — not the next one in the list, because on a map
+"next" means next on screen. Distance along the travel axis counts double
+against distance across it, so pressing right from France reaches Germany
+rather than wandering up to Norway. Measured: right from Algeria goes Libya,
+Egypt, Israel.
+
+Focus gets the same treatment as hover — the tooltip opens and the dot grows —
+plus a `:focus-visible` ring, since there is no useful browser default on a
+24px transparent box over a dark map. Arrow keys are also `preventDefault`ed,
+because Google Maps pans on them by default and would otherwise fight the
+navigation.
+
 ## The map arrives
 
 Two pieces of motion, both on `components/WorldMap.tsx`.

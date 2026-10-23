@@ -89,6 +89,48 @@ interface MarkerEls {
   enterDelay: number
   /** Whether this bubble currently carries a reading, so a fill can be spotted. */
   lit: boolean
+  /** Where it sits, so arrow keys can move to the country actually next to it. */
+  lat: number
+  lng: number
+}
+
+/**
+ * The marker an arrow key should move to.
+ *
+ * Every marker used to be its own tab stop, which put 200 of them between the
+ * top of the dashboard and anything below it. The map is one stop now, and
+ * moves within it the way a composite widget should: by arrow key, to the
+ * nearest country in that direction rather than to the next one in the list,
+ * because on a map "next" means next on screen.
+ *
+ * Distance along the travel axis counts double against distance across it, so
+ * pressing right from France reaches Germany rather than wandering up to
+ * Norway.
+ */
+function nextInDirection(
+  from: MarkerEls,
+  all: MarkerEls[],
+  key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown',
+): MarkerEls | null {
+  const horizontal = key === 'ArrowLeft' || key === 'ArrowRight'
+  const forward = key === 'ArrowRight' || key === 'ArrowUp'
+
+  let best: MarkerEls | null = null
+  let bestScore = Infinity
+
+  for (const m of all) {
+    if (m === from) continue
+    const along = horizontal ? m.lng - from.lng : m.lat - from.lat
+    if (forward ? along <= 0 : along >= 0) continue
+
+    const across = horizontal ? Math.abs(m.lat - from.lat) : Math.abs(m.lng - from.lng)
+    const score = Math.abs(along) + across * 2
+    if (score < bestScore) {
+      bestScore = score
+      best = m
+    }
+  }
+  return best
 }
 
 /**
@@ -273,8 +315,10 @@ export default function WorldMap() {
           opacity:0;transform:scale(.4);
           transition:opacity .45s ease, transform .55s cubic-bezier(.2,1.25,.4,1);
         `
+        el.className = 'map-marker'
         el.setAttribute('role', 'button')
-        el.setAttribute('tabindex', '0')
+        // Roving tabindex: exactly one marker is reachable by Tab at a time.
+        el.setAttribute('tabindex', markersRef.current.size === 0 ? '0' : '-1')
         el.setAttribute('aria-label', `${country.name} — open news`)
 
         // Ring and dot are both centred on the marker box so a tier change
@@ -321,6 +365,8 @@ export default function WorldMap() {
           name: country.name,
           enterDelay: enterDelayFor(country.lng),
           lit: false,
+          lat: country.lat,
+          lng: country.lng,
         }
         paint(els, null)
         markersRef.current.set(country.code, els)
@@ -336,9 +382,42 @@ export default function WorldMap() {
           dot.style.transform = 'translate(-50%,-50%) scale(1)'
         })
         el.addEventListener('click', e => { e.stopPropagation(); open() })
+
+        // Focus gets the same treatment as hover, so a keyboard user can see
+        // and read where they are instead of inferring it from a ring.
+        el.addEventListener('focus', () => {
+          tip.style.display = 'block'
+          dot.style.transform = 'translate(-50%,-50%) scale(1.5)'
+        })
+        el.addEventListener('blur', () => {
+          tip.style.display = 'none'
+          dot.style.transform = 'translate(-50%,-50%) scale(1)'
+        })
+
         el.addEventListener('keydown', e => {
-          const key = (e as KeyboardEvent).key
-          if (key === 'Enter' || key === ' ') { e.preventDefault(); open() }
+          const ev = e as KeyboardEvent
+          if (ev.key === 'Enter' || ev.key === ' ') {
+            e.preventDefault()
+            open()
+            return
+          }
+          if (
+            ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight' &&
+            ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown'
+          ) return
+
+          // The map pans on arrow keys by default, which would fight this.
+          e.preventDefault()
+          e.stopPropagation()
+
+          const here = markersRef.current.get(country.code)
+          if (!here) return
+          const target = nextInDirection(here, [...markersRef.current.values()], ev.key)
+          if (!target) return
+
+          here.box.setAttribute('tabindex', '-1')
+          target.box.setAttribute('tabindex', '0')
+          target.box.focus()
         })
 
         const overlay = new google.maps.OverlayView()
