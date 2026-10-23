@@ -105,6 +105,33 @@ bare heading.
 
 Repeated story links on a rendered country page: 3–4 → 0.
 
+## The dashboard's call to action
+
+`components/CountryPanel.tsx` — a panel that slides out of the left edge,
+collapsed by default to a labelled rectangle.
+
+It was a centred hero, which put the product's own copy over the middle of the
+map, the part people came to look at, and left nowhere on the screen to put
+anything else. Collapsed-by-default means the map is unobstructed rather than
+merely less obstructed, and the middle is free for whatever the dashboard grows
+next.
+
+Both states stay mounted and cross-slide. The hidden one is `visibility:
+hidden`, which also takes its input and links out of the tab order, so there is
+never a focusable control behind the one that is showing. Escape collapses it;
+there is deliberately **no** click-outside, because the surface behind the panel
+is a draggable map and ending a pan would snap it shut.
+
+The expanded card is deliberately **not** a scroll container. `CountrySearch`
+hangs its results in an absolutely positioned list below the field, and any
+`overflow` on the card clips that list to the card's bounds — a seven-country
+result came back showing two.
+
+The panel also owns the map scrim, which is sized to whichever state it is in:
+a narrow wash along the left edge when collapsed, wider and darker when open.
+The scrim used to be a radial centred on the hero, which darkened the middle of
+the map for copy that no longer sits there.
+
 ## The map and the pages agree
 
 The dashboard's bubbles come from `/api/pulse`, and that endpoint used to read

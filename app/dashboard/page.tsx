@@ -2,15 +2,13 @@
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useEffect } from 'react'
-import CountrySearch from '@/components/CountrySearch'
-import { COUNTRIES, FEATURED_CODES } from '@/lib/countries'
+import CountryPanel from '@/components/CountryPanel'
+import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
 import { SOURCE_COUNT } from '@/lib/sources'
 import { useIsCompact } from '@/lib/useMediaQuery'
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false })
-
-const QUICK_PICKS = FEATURED_CODES
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
@@ -80,88 +78,12 @@ export default function Dashboard() {
         <WorldMap />
       </div>
 
-      {/* Scrim — keeps hero copy legible over busy map labels */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute', inset: 0, zIndex: 150, pointerEvents: 'none',
-          background: isCompact
-            ? 'linear-gradient(to bottom, rgba(8,8,12,.92) 0%, rgba(8,8,12,.5) 34%, transparent 52%)'
-            : 'radial-gradient(ellipse 48% 44% at 50% 30%, rgba(8,8,12,.93) 0%, rgba(8,8,12,.78) 45%, rgba(8,8,12,.28) 72%, transparent 88%)',
-        }}
-      />
-
-      {/* ── HERO SEARCH CTA ── */}
-      <div style={{
-        position: 'absolute',
-        top: isCompact ? `calc(${navHeight}px + var(--safe-top) + 20px)` : '17%',
-        left: '50%', transform: 'translateX(-50%)',
-        width: isCompact ? 'calc(100% - 32px)' : 'min(640px, 92vw)',
-        zIndex: 200, pointerEvents: 'none',
-      }}>
-        <div className="fade-up" style={{ pointerEvents: 'auto' }}>
-          {!isCompact && (
-            <div style={{ textAlign: 'center', marginBottom: '22px' }}>
-              <h1 className="display-lg" style={{ marginBottom: '10px', textWrap: 'balance' }}>
-                Pick a country. Get the full picture.
-              </h1>
-              <p style={{
-                fontSize: '15px', fontWeight: 500, color: 'var(--text-2)',
-                letterSpacing: '-.01em', maxWidth: '470px', margin: '0 auto',
-                textWrap: 'balance',
-              }}>
-                Headlines, politics, world, economy and finance — one page per country,
-                refreshed every 20 minutes.
-              </p>
-            </div>
-          )}
-
-          <CountrySearch size={isCompact ? 'compact' : 'hero'} />
-
-          {/* Quick picks */}
-          <div style={{
-            display: 'flex', flexWrap: 'wrap', gap: '8px',
-            justifyContent: 'center', marginTop: '14px',
-          }}>
-            {!isCompact && (
-              <span className="mono-label" style={{ color: 'var(--text-4)', alignSelf: 'center', marginRight: '2px' }}>
-                Jump to
-              </span>
-            )}
-            {QUICK_PICKS.map(code => {
-              const c = COUNTRIES.find(x => x.code === code)
-              if (!c) return null
-              return (
-                <Link
-                  key={code}
-                  href={`/country/${code}`}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '7px',
-                    padding: '7px 13px', borderRadius: '999px',
-                    background: 'rgba(18,18,26,.88)',
-                    border: '1px solid var(--border)',
-                    backdropFilter: 'blur(14px)',
-                    fontSize: '13px', fontWeight: 600, color: 'var(--text-2)',
-                    letterSpacing: '-.01em', textDecoration: 'none',
-                    transition: 'border-color .18s ease, color .18s ease',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = 'var(--accent-line)'
-                    e.currentTarget.style.color = 'var(--text)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = 'var(--border)'
-                    e.currentTarget.style.color = 'var(--text-2)'
-                  }}
-                >
-                  <span style={{ fontSize: '14px', lineHeight: 1 }} aria-hidden>{c.flag}</span>
-                  {c.name}
-                </Link>
-              )
-            })}
-          </div>
-        </div>
-      </div>
+      {/* ── CALL TO ACTION ──
+          Left edge, collapsed by default. It was a centred hero, which covered
+          the middle of the map — the part people actually came to read — and
+          left nowhere to put anything else on this screen. The panel brings its
+          own scrim, sized to whichever state it is in. */}
+      <CountryPanel />
 
       {/* ── BOTTOM STATS STRIP ──
           Google's attribution logo is pinned bottom-left of the map at
