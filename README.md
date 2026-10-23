@@ -94,9 +94,13 @@ sections below it are the detail, so `app/country/[code]/page.tsx` builds each
 section's preview from the best items nothing above it has already shown. Only
 the preview is deduplicated — section counts and the "see all" pages stay
 complete, because World genuinely does contain the world story Headlines opened
-with. Sections are fetched 40 deep, so skipping a handful costs nothing, and a
-section too thin to run out falls back to showing the repeats rather than
-rendering short.
+with.
+
+A thin section is shown short rather than padded back up to five with stories
+the reader has just read. Padding was tried first and put three repeats on
+Brazil's page on a build where its feeds came back nearly empty, which reads as
+a bug rather than as a quiet news day. A section with nothing left at all still
+shows its top story, so a heading never stands over nothing.
 
 Repeated story links on a rendered country page: 3–4 → 0, with all 25 cards
 still filled, Luxembourg and Mongolia included.

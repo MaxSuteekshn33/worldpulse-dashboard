@@ -59,16 +59,18 @@ export default async function CountryPage(
    *
    * Only the preview is deduplicated, never the section itself: the counts in
    * the nav and the "see all" pages stay complete, because World genuinely does
-   * contain the world story Headlines opened with. And because each section is
-   * fetched 40 deep, skipping a handful of repeats costs nothing — a section
-   * thin enough to run out falls back to showing them rather than rendering
-   * short.
+   * contain the world story Headlines opened with.
+   *
+   * A thin section is shown short rather than padded back up to five with
+   * stories the reader has just read — padding was the first thing tried here
+   * and it put three repeats on Brazil's page, which reads as a bug rather than
+   * as a quiet news day. A section with nothing left at all still shows its top
+   * story, so the heading is never left standing over nothing.
    */
   const shown = new Set<string>()
   const previews = results.map(({ articles }) => {
     const unseen = articles.filter(a => !shown.has(a.url))
-    const repeats = articles.filter(a => shown.has(a.url))
-    const preview = unseen.concat(repeats).slice(0, PREVIEW)
+    const preview = unseen.length > 0 ? unseen.slice(0, PREVIEW) : articles.slice(0, 1)
     for (const a of preview) shown.add(a.url)
     return preview
   })
