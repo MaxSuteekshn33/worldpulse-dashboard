@@ -26,40 +26,78 @@ export default function StoryDeck({ articles, color, segmentLabel, countryName }
 
   // Cards below the fold rise into place as they are scrolled to.
   //
-  // Only the ones below the fold: a card already on screen is left exactly as
-  // the server rendered it, so nothing is hidden and then shown again a frame
-  // later. Everything here is additive, so with JavaScript off the deck is
-  // simply the deck.
+  // Two jobs, two mechanisms, because each is bad at the other's.
+  //
+  // Deciding WHICH cards start below the fold is the observer's, because it
+  // measures after layout. Measuring by hand on mount shipped broken: on a
+  // prerendered page the effect runs before card heights have settled, every
+  // card reads as above the fold, and the whole deck is skipped — which is
+  // what the live site did while localhost, images already cached, looked
+  // fine.
+  //
+  // REVEALING them is a scroll handler's, because an observer cannot do it. A
+  // flick or an anchor jump moves a card from below the viewport to above it
+  // without ever intersecting, so its state never changes and no callback
+  // fires — leaving cards the reader has already scrolled past sitting blank
+  // behind them. Measured: jumping to the bottom of a UK page left 16 of 25
+  // blank.
+  //
+  // Everything here is additive: a card already on screen is left exactly as
+  // the server rendered it, and with JavaScript off the deck is just the deck.
   useEffect(() => {
     const node = grid.current
     if (!node) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
-    const observer = new IntersectionObserver(
-      entries => {
-        // Cards crossing the line together cascade rather than snapping in as
-        // a block. The delay is per batch, so it tracks the real grid instead
-        // of assuming a column count.
-        let n = 0
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue
-          const el = entry.target as HTMLElement
-          el.style.transitionDelay = `${Math.min(n, 5) * 55}ms`
-          el.classList.add('is-visible')
-          observer.unobserve(el)
-          n++
-        }
-      },
-      { rootMargin: '0px 0px -6% 0px' },
-    )
+    const pending = new Set<HTMLElement>()
+    let queued = false
 
-    for (const card of Array.from(node.children)) {
-      if (card.getBoundingClientRect().top < window.innerHeight) continue
-      card.classList.add('will-reveal')
-      observer.observe(card)
+    function reveal() {
+      queued = false
+      // Cards crossing the line together cascade rather than snapping in as a
+      // block. The delay is per pass, so it follows the real grid instead of
+      // assuming a column count.
+      let n = 0
+      for (const el of Array.from(pending)) {
+        if (el.getBoundingClientRect().top > window.innerHeight * 0.94) continue
+        el.style.transitionDelay = `${Math.min(n, 5) * 55}ms`
+        el.classList.add('is-visible')
+        pending.delete(el)
+        n++
+      }
     }
 
-    return () => observer.disconnect()
+    function onScroll() {
+      if (queued) return
+      queued = true
+      requestAnimationFrame(reveal)
+    }
+
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        const el = entry.target as HTMLElement
+        observer.unobserve(el)
+        // Below the fold, and not merely behind us: hide it until it is
+        // reached. `top > 0` is what separates "not yet" from "already past".
+        if (!entry.isIntersecting && entry.boundingClientRect.top > 0) {
+          el.classList.add('will-reveal')
+          pending.add(el)
+        }
+      }
+      // The page may already be scrolled — a restored position, a back
+      // navigation — so settle once before waiting for any movement.
+      reveal()
+    })
+
+    for (const card of Array.from(node.children)) observer.observe(card)
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll, { passive: true })
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
   }, [articles])
 
   function close() {

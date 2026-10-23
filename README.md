@@ -121,13 +121,26 @@ same card proportions, same grid — so nothing jumps when content lands. On the
 dashboard, `WorldMap` shows a placeholder until the map's own `tilesloaded`
 fires, which is a real signal rather than a guessed timeout.
 
-**Cards rise in as you scroll.** `StoryDeck` observes its own grid, and the
-ordering is the whole trick: it adds `will-reveal` **only to cards that start
-below the fold**. A card already on screen is left exactly as the server
-rendered it, so nothing is hidden and then shown again a frame later. Cards
-crossing the line together get a staggered `transition-delay` computed per
-IntersectionObserver batch, so the cascade follows the real grid instead of
-assuming a column count.
+**Cards rise in as you scroll.** `StoryDeck` adds `will-reveal` **only to cards
+that start below the fold**, so a card already on screen is left exactly as the
+server rendered it and nothing is hidden and then shown again a frame later.
+
+Two jobs, two mechanisms, because each is bad at the other's:
+
+- **Which cards start below the fold** is the IntersectionObserver's call,
+  because it measures after layout. Measuring by hand on mount shipped broken:
+  on a prerendered page the effect runs before card heights have settled, every
+  card reads as above the fold, and the whole deck is skipped. The live site did
+  exactly that while localhost, its images already cached, looked fine.
+- **Revealing them** is a scroll handler's, because an observer cannot do it. A
+  flick or an anchor jump moves a card from below the viewport to above it
+  without ever intersecting — its state never changes, so no callback fires.
+  Jumping to the bottom of a UK page left 16 of 25 cards sitting blank behind
+  the reader. The handler is rAF-throttled and runs once after classification,
+  so a restored scroll position settles too.
+
+Cards crossing the line together get a staggered `transition-delay` computed per
+pass, so the cascade follows the real grid instead of assuming a column count.
 
 **The stats strip counts up.** `CountUp` starts at its final value — what the
 server renders, what you get without JavaScript, and what anyone who asked for
