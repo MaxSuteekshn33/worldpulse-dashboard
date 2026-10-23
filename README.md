@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WorldPulse — Live News Intelligence
 
-## Getting Started
+Interactive world news dashboard. Pick a country on the map, get a dedicated page with
+headlines, politics, world affairs, economy and finance — refreshed every 20 minutes.
 
-First, run the development server:
+**Live:** https://worldpulse-dashboard-gov9.vercel.app
+
+## Routes
+
+| Route | Type | Purpose |
+|---|---|---|
+| `/` | Static | Landing page with search CTA + coverage stats |
+| `/dashboard` | Static | World map, 50 pulse bubbles, centred country search |
+| `/country/[code]` | ISR (20 min) | Per-country page: map backdrop + 5 news sections |
+| `/api/news` | Dynamic | Articles for one country + segment |
+| `/api/pulse` | Dynamic | Dominant segment per country (powers bubble colours) |
+| `/api/meta` | Dynamic | Coverage counts for the stats strip |
+
+## Architecture
+
+- **Next.js 16** (App Router, Turbopack), React 19, TypeScript
+- **Google Maps JS API** with `region=IN` so Indian borders render correctly
+- **RSS only** — no API keys, no quotas, free forever
+
+`lib/news.ts` is the single news engine. Both the API routes and the server-rendered
+country page call `getSegmentNews()`, so caching and filtering behave identically.
+
+### News freshness
+
+Articles are cached for 20 minutes (`REVALIDATE_SECONDS`) and the country pages
+revalidate on the same cadence. Three things keep the deck genuinely fresh:
+
+1. **Sorted by real publish time.** Results from all feeds are merged and sorted
+   newest-first. Previously they were concatenated per source and sliced, so a stale
+   item from the first feed outranked a fresh one from the second.
+2. **Stale items dropped.** Anything older than 7 days is filtered out, with a
+   fallback to newest-available so a quiet country never renders blank.
+3. **Relative time computed client-side.** Only the ISO timestamp is cached;
+   `<TimeAgo>` derives "18m ago" live, so a cached page never reports a stale age.
+
+### Sources
+
+BBC, The Guardian, Al Jazeera, Indian Express, Sky News.
+
+> Every CNN endpoint (`rss.cnn.com/*`) is dead — it refuses connections outright.
+> It was one of only three original sources, which is why whole segments used to
+> come back empty. Do not re-add it without testing.
+
+Feeds that are inherently about one country (a national politics or business desk)
+carry an `implies` code. A story on the Indian Express politics desk rarely contains
+the word "India", so alias matching alone discarded most of them.
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Requires `NEXT_PUBLIC_GOOGLE_MAPS_KEY` in `.env.local`. Pull it with:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+vercel env pull .env.local --environment=preview
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Note: the key is set for Preview and Production only — a plain `vercel env pull`
+targets Development and will appear to be missing.
 
-## Learn More
+## Design tokens
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Defined in `app/globals.css`. Accents are deliberately desaturated and glows are
+kept low; raise contrast with weight and size rather than brightness.

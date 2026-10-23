@@ -1,119 +1,231 @@
 @import "tailwindcss";
 
+/*
+ * WorldPulse design tokens — "quiet premium dark".
+ * The old theme leaned on a hot #00e5ff neon with heavy 20–30px glows, which
+ * read as harsh and flattened the type. Accents are now desaturated, glows are
+ * roughly a third of their old strength, and text contrast is raised instead.
+ */
 :root {
-  --bg: #0a0a0f;
-  --glass: rgba(255,255,255,.04);
-  --glass-hover: rgba(255,255,255,.07);
-  --glass-border: rgba(255,255,255,.08);
-  --neon: #00e5ff;
-  --neon-glow: rgba(0,229,255,.18);
-  --neon-border: rgba(0,229,255,.3);
-  --pink: #ec4899;
-  --orange: #f97316;
-  --green: #22c55e;
-  --blue: #3b82f6;
-  --text: #ffffff;
-  --text-dim: rgba(255,255,255,.55);
-  --text-faint: rgba(255,255,255,.28);
-  --panel-bg: rgba(6,6,14,.92);
+  /* Surfaces — near-OLED base with layered elevation */
+  --bg:         #08080C;
+  --surface-1:  #101017;
+  --surface-2:  #16161F;
+  --surface-3:  #1D1D28;
+  --panel-bg:   rgba(14,14,20,.94);
 
-  /* Device safe-area insets (iOS notch / home indicator / Android gesture bar) */
-  --safe-top: env(safe-area-inset-top, 0px);
+  /* Hairlines */
+  --border:      rgba(255,255,255,.08);
+  --border-mid:  rgba(255,255,255,.14);
+  --border-strong: rgba(255,255,255,.22);
+
+  /* Accent — toned steel-cyan, replaces the old #00e5ff */
+  --accent:        #4EA3C2;
+  --accent-bright: #6FBFDB;
+  --accent-soft:   rgba(78,163,194,.14);
+  --accent-line:   rgba(78,163,194,.30);
+  --accent-glow:   rgba(78,163,194,.10);
+
+  /* Text — higher contrast, fewer washed-out greys */
+  --text:       #F4F6F8;
+  --text-2:     rgba(244,246,248,.74);
+  --text-3:     rgba(244,246,248,.50);
+  --text-4:     rgba(244,246,248,.32);
+
+  /* Segment accents — desaturated siblings of the originals */
+  --seg-headline: #5B8DEF;
+  --seg-politics: #C86FA6;
+  --seg-world:    #D18A4E;
+  --seg-economy:  #8C7CD0;
+  --seg-finance:  #4FA97C;
+
+  /* Elevation — neutral shadows, no coloured bloom */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.45);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,.55);
+
+  /* Device safe-area insets (notch / home indicator / gesture bar) */
+  --safe-top:    env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; background: var(--bg); color: #fff; overflow: hidden; overscroll-behavior: none; }
-html { -webkit-text-size-adjust: 100%; }
-body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
-/* Comfortable, consistent tap feedback across the app (no layout shift) */
+/*
+ * min-height, not height. A hard `height: 100%` clamps the body box to the
+ * viewport, so on long pages (the country route) everything past the first
+ * screen paints outside the body background and renders as a black band.
+ */
+html, body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  overscroll-behavior: none;
+}
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  /* Heavier default weight + tighter rendering = the "stronger text" ask */
+  font-weight: 450;
+  font-size: 16px;
+  line-height: 1.55;
+  letter-spacing: -0.004em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Map pages lock scroll; article pages opt back in via .page-scroll */
+body.lock-scroll { overflow: hidden; }
+
+h1, h2, h3, h4 {
+  font-family: Archivo, Inter, system-ui, sans-serif;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  color: var(--text);
+}
+h1 { font-weight: 900; }
+h2, h3 { font-weight: 800; }
+
+a { color: inherit; }
 button, a, [role="button"] { touch-action: manipulation; }
-button:active, [role="button"]:active { opacity: .8; }
+button:active, [role="button"]:active { opacity: .85; }
+
+/* Keyboard focus — visible but on-brand */
+:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-/* ── Glassmorphism ── */
+/* ── Typographic utilities ────────────────────────────────── */
+
+/* Mono is now reserved for labels/meta only — never body copy.
+   Minimum 10px with restrained tracking so it stays legible. */
+.mono-label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.mono-meta {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.display-xl { font-family: Archivo, sans-serif; font-weight: 900; font-size: clamp(34px, 6vw, 62px); line-height: 1.02; letter-spacing: -.035em; }
+.display-lg { font-family: Archivo, sans-serif; font-weight: 900; font-size: clamp(26px, 4vw, 40px); line-height: 1.08; letter-spacing: -.03em; }
+.heading-md { font-family: Archivo, sans-serif; font-weight: 800; font-size: 20px; line-height: 1.2;  letter-spacing: -.02em; }
+
+/* Card headline — bolder and larger than the old 13px mono */
+.headline-text {
+  font-family: Inter, system-ui, sans-serif;
+  font-weight: 650;
+  font-size: 16px;
+  line-height: 1.32;
+  letter-spacing: -.012em;
+  color: var(--text);
+}
+.body-text {
+  font-size: 14.5px;
+  font-weight: 450;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+/* ── Surfaces ─────────────────────────────────────────────── */
 .glass {
-  background: var(--glass);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,.035);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--border);
 }
-.glass-neon {
-  background: rgba(0,229,255,.04);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  border: 1px solid rgba(0,229,255,.2);
-  box-shadow: 0 0 30px rgba(0,229,255,.08), inset 0 1px 0 rgba(0,229,255,.1);
+.panel {
+  background: var(--panel-bg);
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
 }
 
-/* ── Pulse bubble ── */
+/* ── Pulse bubble ─────────────────────────────────────────── */
 @keyframes pulse-ring {
-  0%   { transform: scale(1);   opacity: .7; }
-  100% { transform: scale(2.8); opacity: 0; }
+  0%   { transform: scale(1);   opacity: .45; }
+  100% { transform: scale(2.4); opacity: 0; }
 }
-.bubble-ring { animation: pulse-ring 1.8s ease-out infinite; }
+.bubble-ring { animation: pulse-ring 2.4s cubic-bezier(.3,.1,.3,1) infinite; }
 
-/* ── Panel slide up ── */
-@keyframes slideUp {
-  from { transform: translateY(100%); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
-}
-.panel-enter { animation: slideUp .32s cubic-bezier(.2,.8,.2,1) forwards; }
-
-/* ── Fade in ── */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
+/* ── Motion ───────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.fade-in { animation: fadeIn .5s cubic-bezier(.2,.8,.2,1) forwards; }
+.fade-up { animation: fadeUp .4s cubic-bezier(.2,.8,.2,1) both; }
 
-/* ── No scrollbar ── */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; overscroll-behavior: contain; }
-
-/* ── News deck visible scrollbar ── */
-.news-scroll { scrollbar-width: thin; scrollbar-color: rgba(236,72,153,.4) rgba(26,10,46,.06); overscroll-behavior: contain; }
-.news-scroll::-webkit-scrollbar { width: 5px; }
-.news-scroll::-webkit-scrollbar-track { background: rgba(26,10,46,.05); border-radius: 8px; }
-.news-scroll::-webkit-scrollbar-thumb { background: rgba(236,72,153,.45); border-radius: 8px; }
-.news-scroll::-webkit-scrollbar-thumb:hover { background: rgba(236,72,153,.7); }
-
-/* ── Dot grid ── */
-.dot-grid {
-  background-image: radial-gradient(circle, rgba(0,229,255,.07) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-/* ── Shimmer loading ── */
 @keyframes shimmer {
   0%   { background-position: -400px 0; }
   100% { background-position: 400px 0; }
 }
 .shimmer {
-  background: linear-gradient(90deg, rgba(255,255,255,.03) 25%, rgba(255,255,255,.07) 50%, rgba(255,255,255,.03) 75%);
+  background: linear-gradient(90deg, rgba(255,255,255,.03) 25%, rgba(255,255,255,.06) 50%, rgba(255,255,255,.03) 75%);
   background-size: 400px 100%;
-  animation: shimmer 1.4s infinite;
+  animation: shimmer 1.5s infinite;
 }
 
-/* ── News card hover lift ── */
-.news-card:hover { transform: translateY(-2px); background: rgba(255,255,255,.09); }
+/* ── Scrollbars ───────────────────────────────────────────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; overscroll-behavior: contain; }
 
-/* ── Segment glow borders ── */
-.card-headline  { border-color: rgba(59,130,246,.28) !important; }
-.card-politics  { border-color: rgba(236,72,153,.28) !important; }
-.card-geopolitics { border-color: rgba(249,115,22,.28) !important; }
-.card-finance   { border-color: rgba(34,197,94,.28) !important; }
+.subtle-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.16) transparent; }
+.subtle-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.subtle-scroll::-webkit-scrollbar-track { background: transparent; }
+.subtle-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 8px; }
+.subtle-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.24); }
 
-.card-headline:hover  { border-color: rgba(59,130,246,.7) !important;  box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 28px rgba(59,130,246,.18) !important; }
-.card-politics:hover  { border-color: rgba(236,72,153,.7) !important;  box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 28px rgba(236,72,153,.18) !important; }
-.card-geopolitics:hover { border-color: rgba(249,115,22,.7) !important; box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 28px rgba(249,115,22,.18) !important; }
-.card-finance:hover   { border-color: rgba(34,197,94,.7) !important;   box-shadow: 0 4px 24px rgba(0,0,0,.3), 0 0 28px rgba(34,197,94,.18) !important; }
+/* ── Dot grid — softened ──────────────────────────────────── */
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(255,255,255,.045) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
 
-/* ── Google Maps zoom control ── */
-.gm-style .gm-bundled-control { filter: invert(1) hue-rotate(180deg) brightness(.7); }
+/* ── News card ────────────────────────────────────────────── */
+.news-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: transform .2s cubic-bezier(.2,.8,.2,1),
+              border-color .2s ease,
+              background .2s ease;
+}
+.news-card:hover {
+  transform: translateY(-2px);
+  background: var(--surface-2);
+  border-color: var(--border-mid);
+}
+
+/* ── Responsive helpers ───────────────────────────────────── */
+/* Server components can't use the viewport hook, so hiding is done in CSS. */
+@media (max-width: 560px) {
+  .hide-sm { display: none !important; }
+}
+
+/* ── Google Maps chrome ───────────────────────────────────── */
+.gm-style .gm-bundled-control { filter: invert(1) hue-rotate(180deg) brightness(.65); }
+.gm-style-cc, .gm-style a[href^="https://maps.google.com"] { opacity: .35; }

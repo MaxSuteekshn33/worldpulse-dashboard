@@ -64,3 +64,24 @@ export const COUNTRIES: CountryMeta[] = [
 export function getCountryByCode(code: string): CountryMeta | undefined {
   return COUNTRIES.find(c => c.code === code)
 }
+
+/**
+ * Per-country map zoom for the country page backdrop, so a large landmass and a
+ * city-state both frame nicely. Anything unlisted falls back to DEFAULT_ZOOM.
+ */
+const DEFAULT_ZOOM = 5
+
+const COUNTRY_ZOOM: Record<string, number> = {
+  RU: 3, CA: 3, US: 4, CN: 4, BR: 4, AU: 4, IN: 4,
+  AR: 4, KZ: 4, ID: 4, MX: 5, ZA: 5, NG: 5, EG: 5,
+  SA: 5, IR: 5, TR: 5, UA: 5, FR: 5, ES: 5, DE: 5,
+  JP: 5, PK: 5, ET: 5, CL: 4, CO: 5, KE: 5, TH: 5,
+  VN: 5, MY: 5, PH: 5, IT: 5, PL: 5, SE: 4, NO: 4,
+  GB: 5, IQ: 6, GR: 6, BD: 6, GH: 6, CZ: 6,
+  HU: 6, PT: 6, AT: 6, KR: 6, NL: 7, BE: 7, CH: 7,
+  IL: 7, AE: 7, SG: 10,
+}
+
+export function getCountryZoom(code: string): number {
+  return COUNTRY_ZOOM[code.toUpperCase()] ?? DEFAULT_ZOOM
+}

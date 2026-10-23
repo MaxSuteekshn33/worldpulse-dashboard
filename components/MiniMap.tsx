@@ -3,18 +3,20 @@ import { useEffect, useRef } from 'react'
 import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
 import { COUNTRIES } from '@/lib/countries'
 
-const COLORS = ['#3b82f6', '#f97316', '#22c55e']
+import { SEGMENTS } from '@/lib/segments'
+
+const COLORS = SEGMENTS.map(s => s.color)
 
 const DARK_STYLE: google.maps.MapTypeStyle[] = [
-  { elementType: 'geometry', stylers: [{ color: '#0a0a0f' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0a0a0f' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#3a3a5a' }] },
-  { featureType: 'administrative.country', elementType: 'geometry.stroke', stylers: [{ color: '#2a2a4a' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#050508' }] },
+  { elementType: 'geometry', stylers: [{ color: '#0B0B11' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0B0B11' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#454A5C' }] },
+  { featureType: 'administrative.country', elementType: 'geometry.stroke', stylers: [{ color: '#2E3340' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#06060A' }] },
   { featureType: 'road', stylers: [{ visibility: 'off' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#0d0d18' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#121620' }] },
   { featureType: 'administrative.locality', stylers: [{ visibility: 'off' }] },
 ]
 
@@ -65,7 +67,8 @@ export default function MiniMap() {
           background:${color};
           position:absolute;top:50%;left:50%;
           transform:translate(-50%,-50%);
-          box-shadow:0 0 6px ${color};
+          box-shadow:0 0 5px ${color};
+          opacity:.85;
         `
         el.appendChild(ring)
         el.appendChild(dot)
@@ -92,5 +95,5 @@ export default function MiniMap() {
     return () => { mapRef.current = null }
   }, [])
 
-  return <div ref={ref} style={{ width: '100%', height: '100%', minHeight: '420px', background: '#0a0a0f' }} />
+  return <div ref={ref} style={{ width: '100%', height: '100%', minHeight: '420px', background: 'var(--bg)' }} />
 }

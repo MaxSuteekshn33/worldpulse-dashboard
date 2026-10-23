@@ -1,300 +1,165 @@
 'use client'
-import { useRouter } from 'next/navigation'
-import { useState, useRef } from 'react'
+import Link from 'next/link'
 import dynamic from 'next/dynamic'
+import { useEffect, useState } from 'react'
+import { ArrowRight } from 'lucide-react'
+import CountrySearch from '@/components/CountrySearch'
 import { COUNTRIES } from '@/lib/countries'
+import { SEGMENTS } from '@/lib/segments'
 import { useIsCompact } from '@/lib/useMediaQuery'
 
 const MiniMap = dynamic(() => import('@/components/MiniMap'), { ssr: false })
 
-const SEGMENTS = [
-  { color: '#3b82f6', label: 'HEADLINES' },
-  { color: '#ec4899', label: 'POLITICS' },
-  { color: '#f97316', label: 'WORLD' },
-  { color: '#22c55e', label: 'FINANCE' },
-]
-
 export default function Landing() {
-  const router = useRouter()
-  const [query, setQuery] = useState('')
-  const [open, setOpen] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
   const isCompact = useIsCompact()
+  const [sources, setSources] = useState<number | null>(null)
 
-  const results = query.trim().length > 0
-    ? COUNTRIES.filter(c => c.name.toLowerCase().includes(query.toLowerCase())).slice(0, 6)
-    : []
-
-  function pick(code: string) {
-    router.push(`/dashboard?country=${code}`)
-  }
+  useEffect(() => {
+    fetch('/api/meta').then(r => r.json()).then(d => setSources(d.sources ?? null)).catch(() => {})
+  }, [])
 
   return (
     <main style={{
-      width: '100vw', height: '100dvh', background: '#0a0a0f',
-      display: 'flex', flexDirection: 'column',
+      minHeight: '100dvh', background: 'var(--bg)',
       position: 'relative', overflow: 'hidden',
+      display: 'flex', flexDirection: 'column',
     }}>
-
-      {/* Dot grid */}
-      <div className="dot-grid" style={{ position: 'fixed', inset: 0, opacity: .5, pointerEvents: 'none', zIndex: 0 }} />
-
-      {/* Radial glow */}
+      {/* Backdrop map */}
+      <div style={{ position: 'absolute', inset: 0, opacity: .5 }}>
+        <MiniMap />
+      </div>
+      <div className="dot-grid" style={{ position: 'absolute', inset: 0, opacity: .35, pointerEvents: 'none' }} />
+      {/* Soft vignette — replaces the old hard cyan radial burst */}
       <div style={{
-        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
-        background: 'radial-gradient(ellipse 70% 50% at 50% 20%, rgba(0,229,255,.05) 0%, transparent 70%)',
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: 'radial-gradient(ellipse 75% 60% at 50% 38%, rgba(8,8,12,.55) 0%, rgba(8,8,12,.88) 62%, var(--bg) 100%)',
       }} />
 
       {/* ── NAV ── */}
-      <nav className="glass" style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-        height: `calc(56px + var(--safe-top))`,
+      <header style={{
+        position: 'relative', zIndex: 10,
+        height: `calc(58px + var(--safe-top))`,
         paddingTop: 'var(--safe-top)',
-        borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-        borderBottom: '1px solid rgba(0,229,255,.1)',
+        borderBottom: '1px solid var(--border)',
+        background: 'rgba(8,8,12,.6)',
+        backdropFilter: 'blur(16px)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: `var(--safe-top) ${isCompact ? '16px' : '32px'} 0`,
+        padding: `var(--safe-top) ${isCompact ? '16px' : '28px'} 0`,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '13px' }}>
           <span style={{
-            fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: isCompact ? '17px' : '20px',
-            color: '#fff', letterSpacing: '-.02em',
+            fontFamily: 'Archivo, sans-serif', fontWeight: 900,
+            fontSize: isCompact ? '17px' : '19px',
+            color: 'var(--text)', letterSpacing: '-.03em',
           }}>
-            WORLD<span style={{ color: '#00e5ff' }}>PULSE</span>
+            WORLD<span style={{ color: 'var(--accent)' }}>PULSE</span>
           </span>
           {!isCompact && (
-            <span style={{
-              fontFamily: 'JetBrains Mono, monospace', fontSize: '9px',
-              color: 'rgba(0,229,255,.4)', letterSpacing: '.2em',
-              borderLeft: '1px solid rgba(0,229,255,.15)', paddingLeft: '14px',
+            <span className="mono-label" style={{
+              color: 'var(--text-4)',
+              borderLeft: '1px solid var(--border-mid)', paddingLeft: '13px',
             }}>
-              LIVE NEWS INTELLIGENCE
+              Live News Intelligence
             </span>
           )}
         </div>
-        {/* Right side intentionally blank — features coming soon */}
-      </nav>
+        <Link
+          href="/dashboard"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '7px',
+            padding: '9px 15px', borderRadius: '9px',
+            background: 'var(--surface-2)', border: '1px solid var(--border-mid)',
+            fontSize: '13.5px', fontWeight: 600, color: 'var(--text)',
+            textDecoration: 'none', letterSpacing: '-.01em',
+          }}
+        >
+          Open map <ArrowRight size={14} strokeWidth={2.5} />
+        </Link>
+      </header>
 
       {/* ── HERO ── */}
-      <div className="fade-in" style={{
-        position: 'absolute', top: `calc(56px + var(--safe-top))`, left: 0, right: 0,
-        zIndex: 10, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', gap: '12px',
-        padding: `${isCompact ? '32px' : '64px'} 20px 0`,
+      <div style={{
+        position: 'relative', zIndex: 10, flex: 1,
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', textAlign: 'center',
+        padding: `${isCompact ? '44px' : '56px'} 20px 40px`,
+        gap: '20px',
       }}>
-        {/* Segment pills */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        {/* Category pills */}
+        <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', justifyContent: 'center' }}>
           {SEGMENTS.map(s => (
-            <div key={s.label} style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              padding: '4px 10px', borderRadius: '20px',
-              background: `${s.color}14`,
-              border: `1px solid ${s.color}40`,
+            <div key={s.id} style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '5px 11px', borderRadius: '999px',
+              background: s.tint, border: `1px solid ${s.color}33`,
             }}>
-              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: s.color, boxShadow: `0 0 6px ${s.color}`, display: 'inline-block' }} />
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '8px', letterSpacing: '.12em', color: s.color }}>{s.label}</span>
+              <span style={{
+                width: '5px', height: '5px', borderRadius: '50%',
+                background: s.color, display: 'inline-block',
+              }} />
+              <span className="mono-label" style={{ color: 'var(--text-2)', fontSize: '9.5px' }}>
+                {s.label}
+              </span>
             </div>
           ))}
         </div>
 
-        {/* Headline */}
-        <h1 style={{
-          fontFamily: 'Archivo, sans-serif', fontWeight: 900,
-          fontSize: 'clamp(30px, 8vw, 60px)', lineHeight: 1.05,
-          textAlign: 'center', letterSpacing: '-.03em', maxWidth: '780px',
-          background: 'linear-gradient(180deg, #fff 40%, rgba(255,255,255,.5) 100%)',
-          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
-        }}>
-          THE WORLD IS HAPPENING.<br />
-          <span style={{
-            background: 'linear-gradient(90deg, #00e5ff, #818cf8)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>TRACK IT LIVE.</span>
+        <h1 className="display-xl" style={{ maxWidth: '800px' }}>
+          The world is happening.
+          <br />
+          <span style={{ color: 'var(--accent)' }}>Track it live.</span>
         </h1>
 
         <p style={{
-          fontFamily: 'JetBrains Mono, monospace', fontSize: isCompact ? '9.5px' : '11px',
-          color: 'rgba(255,255,255,.35)', letterSpacing: '.1em',
-          textAlign: 'center', marginBottom: '8px', maxWidth: '480px',
+          fontSize: isCompact ? '15px' : '16.5px', fontWeight: 450,
+          color: 'var(--text-2)', maxWidth: '520px', lineHeight: 1.55,
         }}>
-          50 COUNTRIES · CNN · SKY NEWS · INDIAN EXPRESS · UPDATES EVERY 20 MIN
+          Headlines, politics, world affairs, economy and finance —
+          one focused page per country, refreshed every 20 minutes.
         </p>
 
-        {/* ── BIG SEARCH CTA — moved to bottom centre, rendered below ── */}
-        <div style={{ display: 'none' }}>
-          <div className="glass-neon" style={{
-            display: 'flex', alignItems: 'center', gap: '12px',
-            borderRadius: '12px', padding: '0 20px', height: '56px',
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input
-              ref={inputRef}
-              value={query}
-              onChange={e => { setQuery(e.target.value); setOpen(true) }}
-              onFocus={() => setOpen(true)}
-              onBlur={() => setTimeout(() => setOpen(false), 160)}
-              placeholder="Search a country to start tracking…"
-              style={{
-                flex: 1, background: 'transparent', border: 'none', outline: 'none',
-                fontFamily: 'JetBrains Mono, monospace', fontSize: '13px',
-                color: '#fff', letterSpacing: '.06em',
-              }}
-            />
-            <button
-              onClick={() => router.push('/dashboard')}
-              style={{
-                fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-                fontSize: '9px', letterSpacing: '.14em',
-                color: '#0a0a0f', background: '#00e5ff',
-                border: 'none', borderRadius: '6px',
-                padding: '8px 16px', cursor: 'pointer',
-                whiteSpace: 'nowrap', transition: 'opacity .15s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.opacity = '.85')}
-              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-            >
-              OPEN MAP ▶
-            </button>
-          </div>
-
-          {/* Dropdown */}
-          {open && results.length > 0 && (
-            <div className="glass" style={{
-              position: 'absolute', top: '62px', left: 0, right: 0,
-              borderRadius: '10px', overflow: 'hidden', zIndex: 9999,
-              boxShadow: '0 16px 48px rgba(0,0,0,.6), 0 0 24px rgba(0,229,255,.08)',
-            }}>
-              {results.map(c => (
-                <div
-                  key={c.code}
-                  onMouseDown={() => pick(c.code)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '12px',
-                    padding: '12px 20px', cursor: 'pointer',
-                    fontFamily: 'JetBrains Mono, monospace', fontSize: '11px',
-                    color: '#fff', letterSpacing: '.06em',
-                    borderBottom: '1px solid rgba(255,255,255,.05)',
-                    transition: 'background .15s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,.08)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <span style={{ fontSize: '18px' }}>{c.flag}</span>
-                  <span>{c.name}</span>
-                  <span style={{ marginLeft: 'auto', color: 'rgba(0,229,255,.5)', fontSize: '9px' }}>VIEW NEWS →</span>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Primary CTA */}
+        <div style={{ width: isCompact ? '100%' : 'min(520px, 92vw)', marginTop: '4px' }}>
+          <CountrySearch size={isCompact ? 'compact' : 'hero'} placeholder="Search a country to start…" />
         </div>
+
+        <Link
+          href="/dashboard"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '8px',
+            fontSize: '14px', fontWeight: 600, color: 'var(--text-3)',
+            textDecoration: 'none', letterSpacing: '-.01em',
+          }}
+        >
+          or explore the world map <ArrowRight size={14} strokeWidth={2.5} />
+        </Link>
       </div>
 
-      {/* ── MAP fills bottom portion ── */}
-      <div style={{
-        position: 'absolute', inset: 0, top: `calc(56px + var(--safe-top))`, zIndex: 1,
-        maskImage: 'linear-gradient(to bottom, transparent 0%, transparent 30%, black 52%, black 100%)',
-        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, transparent 30%, black 52%, black 100%)',
+      {/* ── STATS STRIP ── */}
+      <footer style={{
+        position: 'relative', zIndex: 10,
+        borderTop: '1px solid var(--border)',
+        background: 'rgba(8,8,12,.75)',
+        backdropFilter: 'blur(16px)',
+        padding: `16px ${isCompact ? '16px' : '28px'} calc(16px + var(--safe-bottom))`,
+        display: 'flex', alignItems: 'center', gap: isCompact ? '18px' : '36px',
+        justifyContent: 'center', flexWrap: 'wrap',
       }}>
-        <MiniMap />
-      </div>
-
-      {/* ── BOTTOM CENTRE SEARCH CTA ── */}
-      <div style={{
-        position: 'fixed', bottom: 'calc(var(--safe-bottom) + 24px)', left: '50%', transform: 'translateX(-50%)',
-        zIndex: 50, width: '100%', maxWidth: '520px', padding: isCompact ? '0 16px' : '0 24px',
-      }}>
-        <div style={{ position: 'relative' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: isCompact ? '10px' : '12px',
-            background: 'rgba(4,4,12,.92)',
-            border: '1.5px solid rgba(0,229,255,.5)',
-            borderRadius: '14px', padding: isCompact ? '0 14px' : '0 20px', height: '56px',
-            boxShadow: '0 0 40px rgba(0,229,255,.2), 0 0 80px rgba(0,229,255,.08), 0 20px 60px rgba(0,0,0,.8)',
-            backdropFilter: 'blur(24px)',
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" strokeWidth="2.5" style={{ flexShrink: 0 }}>
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input
-              value={query}
-              onChange={e => { setQuery(e.target.value); setOpen(true) }}
-              onFocus={() => setOpen(true)}
-              onBlur={() => setTimeout(() => setOpen(false), 160)}
-              placeholder={isCompact ? 'Search a country…' : 'Search a country to start tracking…'}
-              inputMode="search"
-              style={{
-                flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none',
-                fontFamily: 'JetBrains Mono, monospace', fontSize: isCompact ? '16px' : '13px',
-                color: '#fff', letterSpacing: '.06em',
-              }}
-            />
-            <button
-              onClick={() => router.push('/dashboard')}
-              style={{
-                flexShrink: 0,
-                fontFamily: 'JetBrains Mono, monospace', fontWeight: 800,
-                fontSize: '10px', letterSpacing: '.14em',
-                color: '#0a0a0f', background: '#00e5ff',
-                border: 'none', borderRadius: '8px',
-                padding: isCompact ? '10px 14px' : '10px 18px', cursor: 'pointer',
-                whiteSpace: 'nowrap', transition: 'opacity .15s',
-                boxShadow: '0 0 20px rgba(0,229,255,.4)',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.opacity = '.85')}
-              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-            >
-              {isCompact ? '▶' : 'OPEN MAP ▶'}
-            </button>
+        {[
+          { v: String(COUNTRIES.length), l: 'Countries' },
+          { v: sources ? String(sources) : '—', l: 'Newsrooms' },
+          { v: String(SEGMENTS.length), l: 'Categories' },
+          { v: '20', l: 'Min refresh' },
+        ].map(({ v, l }) => (
+          <div key={l} style={{ display: 'flex', alignItems: 'baseline', gap: '7px' }}>
+            <span style={{
+              fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: '18px',
+              color: 'var(--text)', letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums',
+            }}>{v}</span>
+            <span className="mono-label" style={{ color: 'var(--text-3)' }}>{l}</span>
           </div>
-
-          {/* Dropdown opens upward */}
-          {open && results.length > 0 && (
-            <div style={{
-              position: 'absolute', bottom: '64px', left: 0, right: 0,
-              background: 'rgba(4,4,12,.97)', border: '1px solid rgba(0,229,255,.2)',
-              borderRadius: '10px', overflow: 'hidden', zIndex: 9999,
-              maxHeight: '50vh', overflowY: 'auto',
-              boxShadow: '0 -8px 40px rgba(0,0,0,.7), 0 0 24px rgba(0,229,255,.08)',
-            }}>
-              {results.map(c => (
-                <div
-                  key={c.code}
-                  onMouseDown={() => pick(c.code)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '12px',
-                    padding: isCompact ? '13px 16px' : '12px 20px', minHeight: isCompact ? '44px' : undefined,
-                    cursor: 'pointer',
-                    fontFamily: 'JetBrains Mono, monospace', fontSize: isCompact ? '13px' : '11px',
-                    color: '#fff', letterSpacing: '.06em',
-                    borderBottom: '1px solid rgba(255,255,255,.05)',
-                    transition: 'background .15s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,.08)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <span style={{ fontSize: '18px' }}>{c.flag}</span>
-                  <span>{c.name}</span>
-                  <span style={{ marginLeft: 'auto', color: 'rgba(0,229,255,.5)', fontSize: '9px' }}>VIEW NEWS →</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Hint text */}
-          <p style={{
-            textAlign: 'center', marginTop: '10px',
-            fontFamily: 'JetBrains Mono, monospace', fontSize: '8px',
-            color: 'rgba(255,255,255,.2)', letterSpacing: '.14em', fontWeight: 700,
-          }}>
-            CLICK ANY COUNTRY BUBBLE ON THE MAP · OR SEARCH HERE
-          </p>
-        </div>
-      </div>
-
+        ))}
+      </footer>
     </main>
   )
 }

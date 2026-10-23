@@ -1,204 +1,208 @@
 'use client'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { useState, useRef, useEffect, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { Search, X } from 'lucide-react'
-import NewsDrawer from '@/components/NewsDrawer'
+import { useEffect, useState } from 'react'
+import CountrySearch from '@/components/CountrySearch'
 import { COUNTRIES } from '@/lib/countries'
-import { useAppStore } from '@/lib/store'
+import { SEGMENTS } from '@/lib/segments'
 import { useIsCompact } from '@/lib/useMediaQuery'
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false })
 
-function CountrySearch() {
-  const [query, setQuery] = useState('')
-  const [open, setOpen] = useState(false)
-  const [mobileExpanded, setMobileExpanded] = useState(false)
-  const selectCountry = useAppStore(s => s.selectCountry)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const isCompact = useIsCompact()
+const QUICK_PICKS = ['IN', 'US', 'GB', 'CN', 'RU']
 
-  const results = query.trim().length > 0
-    ? COUNTRIES.filter(c => c.name.toLowerCase().includes(query.toLowerCase())).slice(0, 6)
-    : []
-
-  function pick(code: string) {
-    selectCountry(code)
-    setQuery('')
-    setOpen(false)
-    setMobileExpanded(false)
-  }
-
-  // Compact viewport: collapse to a 44×44 icon button that expands into a full-width search bar
-  if (isCompact && !mobileExpanded) {
-    return (
-      <button
-        onClick={() => { setMobileExpanded(true); setTimeout(() => inputRef.current?.focus(), 50) }}
-        aria-label="Search country"
-        style={{
-          position: 'absolute', top: '50%', right: '12px', transform: 'translateY(-50%)', zIndex: 99999,
-          width: '40px', height: '40px', borderRadius: '10px',
-          background: 'rgba(4,4,12,.85)', border: '1px solid rgba(0,229,255,.45)',
-          backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', boxShadow: '0 0 16px rgba(0,229,255,.12)',
-        }}
-      >
-        <Search size={16} strokeWidth={2.3} color="#00e5ff" />
-      </button>
-    )
-  }
-
+function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div style={{
-      position: isCompact ? 'fixed' : 'absolute',
-      top: isCompact ? 'calc(var(--safe-top) + 8px)' : '50%',
-      left: isCompact ? '12px' : 'auto',
-      right: '12px',
-      transform: isCompact ? 'none' : 'translateY(-50%)',
-      zIndex: 99999,
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '10px',
-        background: 'rgba(4,4,12,.92)',
-        border: '1px solid rgba(0,229,255,.45)',
-        borderRadius: '8px', padding: '0 14px', height: '44px',
-        backdropFilter: 'blur(16px)',
-        boxShadow: '0 0 20px rgba(0,229,255,.15), 0 0 50px rgba(0,229,255,.05)',
-        transition: 'box-shadow .2s',
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px' }}>
+      <span style={{
+        fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: '17px',
+        color: 'var(--text)', letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums',
       }}>
-        <Search size={14} strokeWidth={2.3} color="#00e5ff" style={{ flexShrink: 0 }} />
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={e => { setQuery(e.target.value); setOpen(true) }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Search country…"
-          inputMode="search"
-          style={{
-            background: 'transparent', border: 'none', outline: 'none',
-            fontFamily: 'JetBrains Mono, monospace', fontSize: isCompact ? '16px' : '12px',
-            color: '#fff', letterSpacing: '.06em', width: isCompact ? '100%' : '170px', minWidth: 0,
-          }}
-        />
-        {isCompact && (
-          <button
-            onClick={() => { setMobileExpanded(false); setQuery(''); setOpen(false) }}
-            aria-label="Close search"
-            style={{
-              flexShrink: 0, width: '28px', height: '28px', borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(255,255,255,.08)', border: 'none', color: '#fff', cursor: 'pointer',
-            }}
-          >
-            <X size={13} strokeWidth={2.3} />
-          </button>
-        )}
-      </div>
-      {open && results.length > 0 && (
-        <div style={{
-          position: 'absolute', top: '48px', right: 0, left: isCompact ? 0 : 'auto',
-          background: 'rgba(4,4,12,.97)', border: '1px solid rgba(0,229,255,.2)',
-          borderRadius: '10px', overflow: 'hidden', zIndex: 99999,
-          minWidth: isCompact ? undefined : '240px',
-          boxShadow: '0 12px 40px rgba(0,0,0,.7), 0 0 20px rgba(0,229,255,.06)',
-        }}>
-          {results.map(c => (
-            <div
-              key={c.code}
-              onMouseDown={() => pick(c.code)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '12px',
-                padding: '12px 16px', cursor: 'pointer',
-                fontFamily: 'JetBrains Mono, monospace', fontSize: '12px',
-                color: '#fff', letterSpacing: '.06em',
-                borderBottom: '1px solid rgba(255,255,255,.04)',
-                transition: 'background .15s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,229,255,.08)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <span style={{ fontSize: '16px' }}>{c.flag}</span>
-              {c.name}
-              <span style={{ marginLeft: 'auto', color: 'rgba(0,229,255,.4)', fontSize: '9px' }}>→</span>
-            </div>
-          ))}
-        </div>
-      )}
+        {value}
+      </span>
+      <span className="mono-label" style={{ color: 'var(--text-3)' }}>{label}</span>
     </div>
   )
 }
 
-function AutoInit() {
-  const selectCountry = useAppStore(s => s.selectCountry)
-  const drawerOpen = useAppStore(s => s.drawerOpen)
-  const searchParams = useSearchParams()
-
-  useEffect(() => {
-    const code = searchParams.get('country')
-    if (code) {
-      // Country passed from landing page search
-      setTimeout(() => selectCountry(code.toUpperCase()), 900)
-    } else if (!drawerOpen) {
-      // Default: open India
-      setTimeout(() => selectCountry('IN'), 1200)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  return null
-}
-
 export default function Dashboard() {
   const isCompact = useIsCompact()
-  const navHeight = 52
+  const [sourceCount, setSourceCount] = useState<number | null>(null)
+  const navHeight = 56
+
+  useEffect(() => {
+    document.body.classList.add('lock-scroll')
+    return () => { document.body.classList.remove('lock-scroll') }
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/meta')
+      .then(r => r.json())
+      .then(d => setSourceCount(d.sources ?? null))
+      .catch(() => {})
+  }, [])
 
   return (
-    <main style={{ width: '100vw', height: '100dvh', background: '#0a0a0f', position: 'relative', overflow: 'hidden' }}>
-
-      <Suspense fallback={null}><AutoInit /></Suspense>
-
+    <main style={{
+      width: '100vw', height: '100dvh', background: 'var(--bg)',
+      position: 'relative', overflow: 'hidden',
+    }}>
       {/* ── NAV ── */}
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20000,
+      <header style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300,
         height: `calc(${navHeight}px + var(--safe-top))`,
         paddingTop: 'var(--safe-top)',
-        background: 'rgba(6,6,14,.9)',
-        borderBottom: '1px solid rgba(0,229,255,.1)',
+        background: 'rgba(8,8,12,.88)',
+        borderBottom: '1px solid var(--border)',
         backdropFilter: 'blur(20px)',
         display: 'flex', alignItems: 'center',
-        padding: `var(--safe-top) ${isCompact ? '16px' : '24px'} 0`,
+        padding: `var(--safe-top) ${isCompact ? '16px' : '28px'} 0`,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', height: `${navHeight}px` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '13px', height: `${navHeight}px` }}>
           <Link href="/" style={{ textDecoration: 'none' }}>
             <span style={{
-              fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: isCompact ? '16px' : '18px',
-              color: '#fff', letterSpacing: '-.02em',
+              fontFamily: 'Archivo, sans-serif', fontWeight: 900,
+              fontSize: isCompact ? '17px' : '19px',
+              color: 'var(--text)', letterSpacing: '-.03em',
             }}>
-              WORLD<span style={{ color: '#00e5ff' }}>PULSE</span>
+              WORLD<span style={{ color: 'var(--accent)' }}>PULSE</span>
             </span>
           </Link>
           {!isCompact && (
-            <span style={{
-              fontFamily: 'JetBrains Mono, monospace', fontSize: '8px',
-              color: 'rgba(0,229,255,.35)', letterSpacing: '.18em',
-              borderLeft: '1px solid rgba(0,229,255,.15)', paddingLeft: '12px',
+            <span className="mono-label" style={{
+              color: 'var(--text-4)',
+              borderLeft: '1px solid var(--border-mid)', paddingLeft: '13px',
             }}>
-              LIVE NEWS INTELLIGENCE
+              Live News Intelligence
             </span>
           )}
         </div>
-        <CountrySearch />
-      </div>
+      </header>
 
       {/* ── MAP ── */}
-      <div style={{ width: '100%', height: '100%', paddingTop: `calc(${navHeight}px + var(--safe-top))` }}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        paddingTop: `calc(${navHeight}px + var(--safe-top))`,
+      }}>
         <WorldMap />
       </div>
 
-      {/* ── NEWS PANEL ── */}
-      <NewsDrawer />
+      {/* Scrim — keeps hero copy legible over busy map labels */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute', inset: 0, zIndex: 150, pointerEvents: 'none',
+          background: isCompact
+            ? 'linear-gradient(to bottom, rgba(8,8,12,.92) 0%, rgba(8,8,12,.5) 34%, transparent 52%)'
+            : 'radial-gradient(ellipse 48% 44% at 50% 30%, rgba(8,8,12,.93) 0%, rgba(8,8,12,.78) 45%, rgba(8,8,12,.28) 72%, transparent 88%)',
+        }}
+      />
+
+      {/* ── HERO SEARCH CTA ── */}
+      <div style={{
+        position: 'absolute',
+        top: isCompact ? `calc(${navHeight}px + var(--safe-top) + 20px)` : '17%',
+        left: '50%', transform: 'translateX(-50%)',
+        width: isCompact ? 'calc(100% - 32px)' : 'min(640px, 92vw)',
+        zIndex: 200, pointerEvents: 'none',
+      }}>
+        <div className="fade-up" style={{ pointerEvents: 'auto' }}>
+          {!isCompact && (
+            <div style={{ textAlign: 'center', marginBottom: '22px' }}>
+              <h1 className="display-lg" style={{ marginBottom: '10px', textWrap: 'balance' }}>
+                Pick a country. Get the full picture.
+              </h1>
+              <p style={{
+                fontSize: '15px', fontWeight: 500, color: 'var(--text-2)',
+                letterSpacing: '-.01em', maxWidth: '470px', margin: '0 auto',
+                textWrap: 'balance',
+              }}>
+                Headlines, politics, world, economy and finance — one page per country,
+                refreshed every 20 minutes.
+              </p>
+            </div>
+          )}
+
+          <CountrySearch size={isCompact ? 'compact' : 'hero'} />
+
+          {/* Quick picks */}
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: '8px',
+            justifyContent: 'center', marginTop: '14px',
+          }}>
+            {!isCompact && (
+              <span className="mono-label" style={{ color: 'var(--text-4)', alignSelf: 'center', marginRight: '2px' }}>
+                Jump to
+              </span>
+            )}
+            {QUICK_PICKS.map(code => {
+              const c = COUNTRIES.find(x => x.code === code)
+              if (!c) return null
+              return (
+                <Link
+                  key={code}
+                  href={`/country/${code}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '7px',
+                    padding: '7px 13px', borderRadius: '999px',
+                    background: 'rgba(18,18,26,.88)',
+                    border: '1px solid var(--border)',
+                    backdropFilter: 'blur(14px)',
+                    fontSize: '13px', fontWeight: 600, color: 'var(--text-2)',
+                    letterSpacing: '-.01em', textDecoration: 'none',
+                    transition: 'border-color .18s ease, color .18s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = 'var(--accent-line)'
+                    e.currentTarget.style.color = 'var(--text)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = 'var(--border)'
+                    e.currentTarget.style.color = 'var(--text-2)'
+                  }}
+                >
+                  <span style={{ fontSize: '14px', lineHeight: 1 }} aria-hidden>{c.flag}</span>
+                  {c.name}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ── BOTTOM STATS STRIP ── */}
+      <footer style={{
+        position: 'absolute', left: 0, right: 0,
+        bottom: 0, zIndex: 200,
+        padding: `12px ${isCompact ? '16px' : '24px'} calc(12px + var(--safe-bottom))`,
+        background: 'linear-gradient(to top, rgba(8,8,12,.95) 55%, transparent)',
+        display: 'flex', alignItems: 'center',
+        gap: isCompact ? '16px' : '28px',
+        flexWrap: 'wrap',
+      }}>
+        <Stat value={String(COUNTRIES.length)} label="Countries" />
+        <Stat value={sourceCount ? String(sourceCount) : '—'} label="Newsrooms" />
+        <Stat value={String(SEGMENTS.length)} label="Categories" />
+
+        {/* Legend */}
+        {!isCompact && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '15px',
+            marginLeft: 'auto', paddingLeft: '20px',
+            borderLeft: '1px solid var(--border)',
+          }}>
+            {SEGMENTS.map(s => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{
+                  width: '7px', height: '7px', borderRadius: '50%',
+                  background: s.color, boxShadow: `0 0 6px ${s.color}`, display: 'inline-block',
+                }} />
+                <span className="mono-label" style={{ color: 'var(--text-3)' }}>{s.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </footer>
     </main>
   )
 }
