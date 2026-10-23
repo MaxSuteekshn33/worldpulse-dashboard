@@ -228,6 +228,40 @@ button:active, [role="button"]:active { opacity: .85; }
   animation: shimmer 1.5s infinite;
 }
 
+/* ── Scroll reveal ────────────────────────────────────────── */
+/* `will-reveal` is added by JavaScript, and only to cards that start below
+   the fold. That ordering is the whole trick: the page renders fully visible,
+   so it reads correctly with no JS and nothing already on screen is hidden and
+   then shown again a frame later. */
+.will-reveal {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity .44s cubic-bezier(.2,.8,.2,1),
+              transform .44s cubic-bezier(.2,.8,.2,1);
+}
+.will-reveal.is-visible { opacity: 1; transform: none; }
+
+/* ── Skeletons ────────────────────────────────────────────── */
+.skeleton {
+  border-radius: 9px;
+  background: linear-gradient(90deg, rgba(255,255,255,.03) 25%, rgba(255,255,255,.065) 50%, rgba(255,255,255,.03) 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.5s infinite;
+}
+.skeleton-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-1);
+  overflow: hidden;
+}
+
+/* A loading state that pulses forever is worse than a still one for anyone
+   who asked the system to stop moving things. */
+@media (prefers-reduced-motion: reduce) {
+  .shimmer, .skeleton { animation: none; }
+  .will-reveal { opacity: 1; transform: none; transition: none; }
+}
+
 /* ── Scrollbars ───────────────────────────────────────────── */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; overscroll-behavior: contain; }

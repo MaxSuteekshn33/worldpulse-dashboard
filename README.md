@@ -105,6 +105,40 @@ bare heading.
 
 Repeated story links on a rendered country page: 3–4 → 0.
 
+## Motion and loading states
+
+`globals.css` had defined `.fade-up` and `.shimmer` for a while and used
+neither; there was no loading state anywhere in the app. Three things now use
+them, and all three are additive — turn JavaScript off and the pages are
+unchanged.
+
+**Loading.** `loading.tsx` under both country routes streams a skeleton the
+moment a link is clicked. It matters more here than in most apps: only five
+countries are prerendered, so for the other 195 the first visit renders on
+demand while feeds are fetched, and until now that time was spent looking at
+the previous page. The skeletons mirror the real layout — same hero height,
+same card proportions, same grid — so nothing jumps when content lands. On the
+dashboard, `WorldMap` shows a placeholder until the map's own `tilesloaded`
+fires, which is a real signal rather than a guessed timeout.
+
+**Cards rise in as you scroll.** `StoryDeck` observes its own grid, and the
+ordering is the whole trick: it adds `will-reveal` **only to cards that start
+below the fold**. A card already on screen is left exactly as the server
+rendered it, so nothing is hidden and then shown again a frame later. Cards
+crossing the line together get a staggered `transition-delay` computed per
+IntersectionObserver batch, so the cascade follows the real grid instead of
+assuming a column count.
+
+**The stats strip counts up.** `CountUp` starts at its final value — what the
+server renders, what you get without JavaScript, and what anyone who asked for
+reduced motion keeps — and animates only on the client. It sets no state in the
+effect body; the first animation frame computes the value, which also avoids
+the `react-hooks/set-state-in-effect` error this repo treats as fatal.
+
+Every one of these honours `prefers-reduced-motion`, including the skeletons:
+a loading state that pulses forever is worse than a still one for someone who
+asked the system to stop moving things.
+
 ## The story popup
 
 Clicking a headline opens `components/StoryModal.tsx` rather than leaving the

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
 import { COUNTRIES } from '@/lib/countries'
@@ -104,6 +104,7 @@ function paint(els: MarkerEls, entry: PulseEntry | null) {
 }
 
 export default function WorldMap() {
+  const [tilesIn, setTilesIn] = useState(false)
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
   const markersRef = useRef<Map<string, MarkerEls>>(new Map())
@@ -191,6 +192,14 @@ export default function WorldMap() {
         },
       })
       mapRef.current = map
+
+      // Tiles can take several seconds on a cold load, and `backgroundColor`
+      // only stops that being a white rectangle — it still leaves the reader
+      // looking at nothing. The placeholder clears on the real signal rather
+      // than a guessed timeout.
+      google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
+        if (!cancelled) setTilesIn(true)
+      })
 
       COUNTRIES.forEach(country => {
         const el = document.createElement('div')
@@ -281,6 +290,31 @@ export default function WorldMap() {
   return (
     <div style={{ width: '100%', height: '100%', background: 'var(--bg)', position: 'relative' }}>
       <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
+
+      <div
+        aria-hidden={tilesIn}
+        className="dot-grid"
+        style={{
+          position: 'absolute', inset: 0,
+          display: 'grid', placeItems: 'center',
+          background: 'var(--bg)',
+          opacity: tilesIn ? 0 : 1,
+          // Nothing to click through once it has faded.
+          pointerEvents: 'none',
+          visibility: tilesIn ? 'hidden' : 'visible',
+          transition: 'opacity .5s ease, visibility .5s',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+          <span className="shimmer" style={{
+            width: '9px', height: '9px', borderRadius: '50%',
+            background: 'var(--accent)',
+          }} />
+          <span className="mono-label" style={{ color: 'var(--text-4)' }}>
+            Loading the world
+          </span>
+        </span>
+      </div>
     </div>
   )
 }

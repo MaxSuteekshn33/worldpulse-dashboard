@@ -3,6 +3,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useEffect } from 'react'
 import CountryPanel from '@/components/CountryPanel'
+import CountUp from '@/components/CountUp'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
 import { SOURCE_COUNT } from '@/lib/sources'
@@ -10,14 +11,14 @@ import { useIsCompact } from '@/lib/useMediaQuery'
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false })
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat({ value, label }: { value: number; label: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: '7px' }}>
       <span style={{
         fontFamily: 'Archivo, sans-serif', fontWeight: 900, fontSize: '17px',
         color: 'var(--text)', letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums',
       }}>
-        {value}
+        <CountUp to={value} />
       </span>
       <span className="mono-label" style={{ color: 'var(--text-3)' }}>{label}</span>
     </div>
@@ -101,9 +102,9 @@ export default function Dashboard() {
         gap: isCompact ? '16px' : '28px',
         flexWrap: 'wrap',
       }}>
-        <Stat value={String(COUNTRIES.length)} label="Countries" />
-        <Stat value={String(SOURCE_COUNT)} label="Newsrooms" />
-        <Stat value={String(SEGMENTS.length)} label="Categories" />
+        <Stat value={COUNTRIES.length} label="Countries" />
+        <Stat value={SOURCE_COUNT} label="Newsrooms" />
+        <Stat value={SEGMENTS.length} label="Categories" />
 
         {/* Legend */}
         {!isCompact && (
