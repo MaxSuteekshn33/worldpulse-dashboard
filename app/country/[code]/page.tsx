@@ -51,6 +51,28 @@ export default async function CountryPage(
     })),
   )
 
+  /**
+   * Headlines is the front page and the four sections below it are the detail,
+   * so a story that leads Headlines must not turn up again halfway down the
+   * same page. Each section previews its best items that nothing above it has
+   * already shown.
+   *
+   * Only the preview is deduplicated, never the section itself: the counts in
+   * the nav and the "see all" pages stay complete, because World genuinely does
+   * contain the world story Headlines opened with. And because each section is
+   * fetched 40 deep, skipping a handful of repeats costs nothing — a section
+   * thin enough to run out falls back to showing them rather than rendering
+   * short.
+   */
+  const shown = new Set<string>()
+  const previews = results.map(({ articles }) => {
+    const unseen = articles.filter(a => !shown.has(a.url))
+    const repeats = articles.filter(a => shown.has(a.url))
+    const preview = unseen.concat(repeats).slice(0, PREVIEW)
+    for (const a of preview) shown.add(a.url)
+    return preview
+  })
+
   const totalArticles = results.reduce((n, r) => n + r.articles.length, 0)
   const newest = results
     .flatMap(r => r.articles)
@@ -156,7 +178,7 @@ export default async function CountryPage(
         maxWidth: '1280px', margin: '0 auto',
         padding: '8px clamp(16px, 3vw, 28px) 80px',
       }}>
-        {results.map(({ meta, articles }) => (
+        {results.map(({ meta, articles }, sectionIndex) => (
           <section
             key={meta.id}
             id={meta.id}
@@ -218,7 +240,7 @@ export default async function CountryPage(
                 gridTemplateColumns: 'repeat(auto-fill, minmax(275px, 1fr))',
                 gap: '15px',
               }}>
-                {articles.slice(0, PREVIEW).map(a => (
+                {previews[sectionIndex].map(a => (
                   <NewsCard key={`${a.source}-${a.url}`} article={a} color={meta.color} />
                 ))}
               </div>

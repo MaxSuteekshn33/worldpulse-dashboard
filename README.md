@@ -71,6 +71,36 @@ beats an empty one.
 Across five countries this cut cross-section duplicates from 114 to 33 while
 every section still filled.
 
+When the gate leaves a section under four items the rest of the pool is added
+back, but on-topic items still rank above it. Replacing the gated set outright,
+as this first did, handed Brazil a World section that was nothing but election
+coverage.
+
+### Headlines, and not repeating itself
+
+Two further things keep Headlines from reading like a second copy of World.
+
+**Topic spread.** Headlines is ungated, so for a country covered mainly by
+foreign desks its top five were five foreign-desk stories. Gating it would be
+wrong — a war IS the top story — so ranking is preserved and repeats of a topic
+are pushed down to make room for the next-best story on a different one. The
+nth story of a topic may not appear before position `n * SPREAD_STRIDE`, which
+puts at most three of any one topic in the first five and scales with the list
+rather than imposing a fixed quota. A country with only one kind of news still
+fills its page: when nothing else is left, ranked order resumes.
+
+**Page-level preview dedupe.** Headlines is the front page and the four
+sections below it are the detail, so `app/country/[code]/page.tsx` builds each
+section's preview from the best items nothing above it has already shown. Only
+the preview is deduplicated — section counts and the "see all" pages stay
+complete, because World genuinely does contain the world story Headlines opened
+with. Sections are fetched 40 deep, so skipping a handful costs nothing, and a
+section too thin to run out falls back to showing the repeats rather than
+rendering short.
+
+Repeated story links on a rendered country page: 3–4 → 0, with all 25 cards
+still filled, Luxembourg and Mongolia included.
+
 ### Sources
 
 Fifteen curated newsrooms, chosen for regional spread (`lib/sources.ts`):
@@ -145,8 +175,10 @@ Offline, no feeds fetched. Asserts every country has match terms, that each
 matches its own name, and — the part worth having — walks all 200 x 199 ordered
 country pairs asserting no country's name matches another country's matcher.
 Then a set of known traps in both directions (Oman/Romania, Mali/Somalia,
-India/Indiana, US/"told us", the nested-name pairs above) and a set of section
-routing cases. `scripts/ts-resolve.mjs` lets `node` run the TypeScript sources
+India/Indiana, US/"told us", the nested-name pairs above), a set of section
+routing cases, and the Headlines topic spread — that it keeps every story, puts
+at most three of one topic in the first five, still leads with the top-ranked
+story, and doesn't truncate a single-topic list. `scripts/ts-resolve.mjs` lets `node` run the TypeScript sources
 directly, so there's no test runner to install.
 
 ## Local development

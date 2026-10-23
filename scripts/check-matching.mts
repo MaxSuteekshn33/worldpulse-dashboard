@@ -14,7 +14,7 @@
  */
 import { COUNTRY_TERMS, matchesCountry, SUPPORTED_CODES } from '../lib/aliases'
 import { COUNTRIES, getCountryByCode } from '../lib/countries'
-import { onTopic, type Article } from '../lib/news'
+import { onTopic, spreadTopics, topicKey, type Article } from '../lib/news'
 import { SEGMENT_IDS, type Segment } from '../lib/segments'
 
 let failures = 0
@@ -142,6 +142,49 @@ check(
 for (const id of SEGMENT_IDS) {
   check(`${id} is a known segment`, SEGMENT_IDS.includes(id))
 }
+
+// ── 6. Headlines topic spread ─────────────────────────────────────────────
+// Headlines is ungated, so for a country covered mainly by foreign desks it
+// came back reading like a second copy of World. Ranking is preserved; repeats
+// of a topic are pushed down to make room for the next-best story elsewhere.
+console.log('\n6. Headlines topic spread')
+
+const worldish = [
+  'Ceasefire talks resume as the foreign minister flies in',
+  'Troops withdraw from the border after the treaty is signed',
+  'Ambassador recalled amid a diplomatic row over sanctions',
+  'Refugees cross the border as the conflict widens',
+  'Peace summit opens with the war high on the agenda',
+]
+const others = [
+  'Inflation eases as GDP growth beats forecasts',
+  'Stocks rally after the central bank signals a rate cut',
+  'Parliament votes on the new cabinet',
+  'Storm leaves thousands without power',
+]
+const spread = spreadTopics([...worldish, ...others].map(h => article(h)))
+
+check('spread keeps every story', spread.length === worldish.length + others.length)
+const leadTopics = spread.slice(0, 5).map(topicKey)
+const topTopicRuns = Math.max(
+  ...[...new Set(leadTopics)].map(t => leadTopics.filter(x => x === t).length),
+)
+check(
+  'no more than 3 of one topic in the first five',
+  topTopicRuns <= 3,
+  `first five were ${leadTopics.join(', ')}`,
+)
+check(
+  'the top-ranked story still leads',
+  spread[0].headline === worldish[0],
+  `led with "${spread[0].headline}"`,
+)
+
+// A single-topic country must still fill its page rather than be truncated.
+const allWorld = spreadTopics(worldish.map(h => article(h)))
+check('a single-topic list is not dropped', allWorld.length === worldish.length)
+
+check('topicKey falls back to general', topicKey(article('Local choir wins a prize')) === 'general')
 
 // ── Result ────────────────────────────────────────────────────────────────
 if (failures > 0) {

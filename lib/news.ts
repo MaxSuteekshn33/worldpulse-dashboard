@@ -408,6 +408,66 @@ function sourceKey(source: string): string {
  * held back by the cap is appended afterwards, so a quiet country covered by a
  * single outlet still fills its section instead of going half empty.
  */
+/**
+ * The section an article reads as, regardless of which one it was filed under.
+ * `general` covers everything the vocabularies don't recognise — sport,
+ * culture, weather, crime — which is a legitimate front-page category, not a
+ * failure to classify.
+ */
+export function topicKey(a: Article): string {
+  const text = `${a.headline} ${a.description}`
+  let bestSegment = 'general'
+  let best = 0
+  for (const segment of TOPIC_SEGMENTS) {
+    const score = topicScore(text, segment)
+    if (score > best) {
+      best = score
+      bestSegment = segment
+    }
+  }
+  return bestSegment
+}
+
+/**
+ * How far apart two stories on the same topic have to sit.
+ *
+ * The nth story of a topic may not appear before position n * STRIDE, so the
+ * first five slots hold at most three of any one topic. Scales with the list
+ * instead of being a fixed quota: a 40-item page still ends up mostly world
+ * stories if that is all the country has, it just doesn't open with five.
+ */
+const SPREAD_STRIDE = 2
+
+/**
+ * Interleaves topics through a ranked list, for Headlines only.
+ *
+ * Headlines is the ungated catch-all, so for a country whose coverage is mostly
+ * foreign-desk reporting it came back reading like a second copy of World —
+ * the same stories, in the same order, one section higher. Gating it would be
+ * wrong (a war IS the top story), so instead the ranking is preserved and
+ * repeats of a topic are pushed down to make room for the next-best story on a
+ * different one. When nothing else is left, the stride is ignored and ranked
+ * order resumes, so a single-topic country still fills its page.
+ */
+export function spreadTopics(ranked: Article[]): Article[] {
+  const remaining = [...ranked]
+  const out: Article[] = []
+  const used = new Map<string, number>()
+
+  while (remaining.length > 0) {
+    let i = remaining.findIndex(
+      a => (used.get(topicKey(a)) ?? 0) * SPREAD_STRIDE <= out.length,
+    )
+    if (i < 0) i = 0
+    const [next] = remaining.splice(i, 1)
+    const key = topicKey(next)
+    used.set(key, (used.get(key) ?? 0) + 1)
+    out.push(next)
+  }
+
+  return out
+}
+
 function capPerSource(ranked: Article[], limit: number): Article[] {
   const cap = Math.max(2, Math.ceil(limit / 4))
   const used = new Map<string, number>()
@@ -636,12 +696,17 @@ export async function getSegmentNews(
       !/\.gov(\.[a-z]{2})?$/i.test(a.source.trim()),
   )
 
-  // Keep only items that actually belong in this section, falling back to the
-  // ungated pool when the gate leaves too little to fill a page.
+  // Keep only items that actually belong in this section. When the gate leaves
+  // too little to fill a page the rest of the pool is added back, but on-topic
+  // items still rank above it — replacing the gated set outright, as this used
+  // to, handed Brazil a World section that was nothing but election coverage.
   const gated = english.filter(a => onTopic(a, segment))
+  const inGate = new Set(gated)
   const pool = gated.length >= MIN_GATED ? gated : english
 
   const ranked = [...pool].sort((a, b) => {
+    const gate = Number(inGate.has(b)) - Number(inGate.has(a))
+    if (gate !== 0) return gate
     const diff = relevanceScore(b, code) - relevanceScore(a, code)
     if (diff !== 0) return diff
     return (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0)
@@ -656,7 +721,9 @@ export async function getSegmentNews(
   // Prefer fresh items; fall back to best-available so a quiet country isn't blank.
   const chosen = fresh.length > 0 ? fresh : ranked
 
-  return { articles: capPerSource(chosen, limit), fetchedAt: new Date().toISOString() }
+  const composed = segment === 'headline' ? spreadTopics(chosen) : chosen
+
+  return { articles: capPerSource(composed, limit), fetchedAt: new Date().toISOString() }
 }
 
 export interface PulseEntry {
