@@ -4,12 +4,46 @@ import { useRouter } from 'next/navigation'
 import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS, type Segment } from '@/lib/segments'
+// Type-only: erased at compile time, so the news pipeline never reaches the client bundle.
+import type { PulseEntry } from '@/lib/news'
 
 const SEGMENT_COLOR = Object.fromEntries(
   SEGMENTS.map(s => [s.id, s.color]),
 ) as Record<Segment, string>
 
+const SEGMENT_LABEL = Object.fromEntries(
+  SEGMENTS.map(s => [s.id, s.label]),
+) as Record<Segment, string>
+
 const IDLE_COLOR = '#6B7389'
+
+/**
+ * How a bubble is drawn, by how much coverage the country has right now.
+ *
+ * Every bubble used to be the same 8px dot inside the same animated 24px ring,
+ * so 200 countries rendered as one undifferentiated field of pulsing circles —
+ * and the ~half with no wire coverage at that moment shouted exactly as loudly
+ * as the half that did. Size, glow and animation now all carry the signal:
+ * quiet countries recede, busy ones pulse.
+ */
+interface Tier {
+  dot: number
+  ring: number
+  ringAlpha: string
+  pulse: boolean
+}
+
+const TIERS: Record<'quiet' | 'active' | 'hot', Tier> = {
+  quiet:  { dot: 4.5, ring: 0,  ringAlpha: '00', pulse: false },
+  active: { dot: 7,   ring: 17, ringAlpha: '66', pulse: false },
+  hot:    { dot: 9,   ring: 23, ringAlpha: '99', pulse: true  },
+}
+
+function tierFor(count: number): Tier {
+  if (count >= 4) return TIERS.hot
+  if (count >= 1) return TIERS.active
+  return TIERS.quiet
+}
 
 /** Dark map styling — softened from the old high-contrast cyberpunk preset. */
 const DARK_STYLE: google.maps.MapTypeStyle[] = [
@@ -29,7 +63,32 @@ const DARK_STYLE: google.maps.MapTypeStyle[] = [
   { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#121620' }] },
 ]
 
-interface MarkerEls { dot: HTMLElement; ring: HTMLElement }
+interface MarkerEls { dot: HTMLElement; ring: HTMLElement; tip: HTMLElement; name: string }
+
+/** Paints one bubble for its current pulse reading. Also used for the idle state. */
+function paint(els: MarkerEls, entry: PulseEntry | null) {
+  const count = entry?.count ?? 0
+  const color = entry ? SEGMENT_COLOR[entry.segment] ?? IDLE_COLOR : IDLE_COLOR
+  const t = tierFor(count)
+
+  els.dot.style.width = `${t.dot}px`
+  els.dot.style.height = `${t.dot}px`
+  els.dot.style.background = color
+  els.dot.style.opacity = entry ? '1' : '.55'
+  els.dot.style.boxShadow = entry
+    ? `0 0 0 1px rgba(255,255,255,.18), 0 0 ${t.dot}px ${color}, 0 0 ${t.dot * 2.4}px ${color}66`
+    : 'none'
+
+  els.ring.style.width = `${t.ring}px`
+  els.ring.style.height = `${t.ring}px`
+  els.ring.style.borderColor = `${color}${t.ringAlpha}`
+  els.ring.style.opacity = t.ring ? '1' : '0'
+  els.ring.classList.toggle('bubble-ring', t.pulse)
+
+  els.tip.textContent = entry
+    ? `${els.name} · ${entry.total} ${entry.total === 1 ? 'story' : 'stories'} · ${SEGMENT_LABEL[entry.segment]}`
+    : `${els.name} · quiet right now`
+}
 
 export default function WorldMap() {
   const mapContainer = useRef<HTMLDivElement>(null)
@@ -57,12 +116,7 @@ export default function WorldMap() {
 
         for (const [code, entry] of Object.entries(data.pulse ?? {})) {
           const els = markersRef.current.get(code)
-          if (!els) continue
-          const seg = (entry as { segment?: Segment } | null)?.segment
-          const color = seg ? SEGMENT_COLOR[seg] ?? IDLE_COLOR : IDLE_COLOR
-          els.dot.style.background = color
-          els.dot.style.boxShadow = `0 0 0 1px rgba(255,255,255,.16), 0 0 8px ${color}, 0 0 20px ${color}99`
-          els.ring.style.borderColor = color
+          if (els) paint(els, entry as PulseEntry | null)
         }
       } catch { /* keep last known colours */ }
     }
@@ -76,6 +130,10 @@ export default function WorldMap() {
         minZoom: 2,
         maxZoom: 7,
         styles: DARK_STYLE,
+        // Painted under the tiles. Without it Google's own default is white, so
+        // every cold load flashed a full-bleed white rectangle behind the dark
+        // hero copy until the first tile landed — which read as a broken map.
+        backgroundColor: '#0B0B11',
         disableDefaultUI: true,
         zoomControl: true,
         zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
@@ -94,23 +152,23 @@ export default function WorldMap() {
         el.setAttribute('tabindex', '0')
         el.setAttribute('aria-label', `${country.name} — open news`)
 
+        // Ring and dot are both centred on the marker box so a tier change
+        // grows them from the middle rather than nudging the country off-mark.
         const ring = document.createElement('div')
-        ring.className = 'bubble-ring'
         ring.style.cssText = `
-          width:24px;height:24px;border-radius:50%;
-          border:1.5px solid ${IDLE_COLOR};
-          position:absolute;top:0;left:0;
-          transition:border-color .5s ease;
+          border-radius:50%;border:1.5px solid transparent;
+          position:absolute;top:50%;left:50%;
+          transform:translate(-50%,-50%);
+          transition:width .5s ease,height .5s ease,border-color .5s ease,opacity .5s ease;
         `
         const dot = document.createElement('div')
         dot.style.cssText = `
-          width:8px;height:8px;border-radius:50%;
-          background:${IDLE_COLOR};
+          border-radius:50%;
           position:absolute;top:50%;left:50%;
           transform:translate(-50%,-50%);
-          box-shadow:0 0 0 1px rgba(255,255,255,.16), 0 0 8px ${IDLE_COLOR}, 0 0 18px ${IDLE_COLOR}88;
           z-index:2;
-          transition:background .5s ease,box-shadow .5s ease,transform .18s ease;
+          transition:width .5s ease,height .5s ease,background .5s ease,
+                     box-shadow .5s ease,opacity .5s ease,transform .18s ease;
         `
         const tip = document.createElement('div')
         tip.style.cssText = `
@@ -121,10 +179,11 @@ export default function WorldMap() {
           letter-spacing:-.01em;color:#F4F6F8;white-space:nowrap;pointer-events:none;
           display:none;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.6);
         `
-        tip.textContent = country.name
-
         el.append(ring, dot, tip)
-        markersRef.current.set(country.code, { dot, ring })
+
+        const els: MarkerEls = { dot, ring, tip, name: country.name }
+        paint(els, null)
+        markersRef.current.set(country.code, els)
 
         const open = () => router.push(`/country/${country.code}`)
 

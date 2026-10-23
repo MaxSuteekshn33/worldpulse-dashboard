@@ -166,10 +166,15 @@ button:active, [role="button"]:active { opacity: .85; }
 }
 
 /* ── Pulse bubble ─────────────────────────────────────────── */
+/* Keeps the ring centred on its marker: the element is placed with a
+   translate(-50%,-50%), and a bare `transform: scale()` here would replace that
+   and throw the halo to the marker's top-left corner. The old 2.6× bloom also
+   merged neighbouring countries into one smear once the map carried 200 of
+   them, so the expansion is tighter now. */
 @keyframes pulse-ring {
-  0%   { transform: scale(.85); opacity: .75; }
-  70%  { opacity: .18; }
-  100% { transform: scale(2.6); opacity: 0; }
+  0%   { transform: translate(-50%, -50%) scale(.9); opacity: .6; }
+  70%  { opacity: .12; }
+  100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
 }
 .bubble-ring { animation: pulse-ring 2.6s cubic-bezier(.25,.6,.35,1) infinite; }
 

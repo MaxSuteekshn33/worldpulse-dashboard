@@ -163,11 +163,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── BOTTOM STATS STRIP ── */}
+      {/* ── BOTTOM STATS STRIP ──
+          Google's attribution logo is pinned bottom-left of the map at
+          z-index 1,000,000 and may not be hidden, so the strip gets out of its
+          way: shifted right on desktop, lifted above it on compact. Before
+          this the "200" in "200 Countries" sat directly under the logo. */}
       <footer style={{
         position: 'absolute', left: 0, right: 0,
         bottom: 0, zIndex: 200,
-        padding: `12px ${isCompact ? '16px' : '24px'} calc(12px + var(--safe-bottom))`,
+        padding: isCompact
+          ? '12px 16px calc(42px + var(--safe-bottom))'
+          : '12px 24px calc(12px + var(--safe-bottom)) 88px',
         background: 'linear-gradient(to top, rgba(8,8,12,.95) 55%, transparent)',
         display: 'flex', alignItems: 'center',
         gap: isCompact ? '16px' : '28px',
@@ -193,6 +199,15 @@ export default function Dashboard() {
                 <span className="mono-label" style={{ color: 'var(--text-3)' }}>{s.label}</span>
               </div>
             ))}
+            {/* Roughly half the map sits quiet at any moment — saying so stops the
+                dim grey dots reading as a map that failed to load. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{
+                width: '5px', height: '5px', borderRadius: '50%',
+                background: '#6B7389', opacity: .55, display: 'inline-block',
+              }} />
+              <span className="mono-label" style={{ color: 'var(--text-4)' }}>Quiet</span>
+            </div>
           </div>
         )}
       </footer>

@@ -24,6 +24,13 @@ export interface Feed {
    * outlet comes from each item's <source> element rather than the feed itself.
    */
   dynamicSource?: boolean
+  /**
+   * True when the feed IS the segment's desk — BBC Politics only ever files
+   * politics. Those items skip the topic check below; everything from a
+   * site-wide feed (Arab News, AllAfrica, Channel News Asia) has to earn its
+   * section on the text, because one such feed is wired into four of them.
+   */
+  desk?: boolean
 }
 
 /**
@@ -42,9 +49,13 @@ export interface Feed {
  * are frozen in 2023; only latest.rss / economy-102 / markets-106 are live.
  */
 export const RSS_FEEDS: Record<Segment, Feed[]> = {
+  // Top stories, whatever the topic. This is the only section with no topic
+  // gate, so it takes front-page feeds rather than desk feeds — the Guardian
+  // entry used to be /world/rss, the same feed `world` uses, which is why the
+  // two sections came back 10-of-12 identical for France.
   headline: [
     { url: 'https://feeds.bbci.co.uk/news/rss.xml',                      source: 'BBC' },
-    { url: 'https://www.theguardian.com/world/rss',                      source: 'The Guardian' },
+    { url: 'https://www.theguardian.com/international/rss',              source: 'The Guardian' },
     { url: 'https://www.aljazeera.com/xml/rss/all.xml',                  source: 'Al Jazeera' },
     { url: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',  source: 'New York Times' },
     { url: 'https://www.euronews.com/rss',                               source: 'Euronews' },
@@ -59,44 +70,44 @@ export const RSS_FEEDS: Record<Segment, Feed[]> = {
     { url: 'https://feeds.skynews.com/feeds/rss/home.xml',               source: 'Sky News' },
   ],
   politics: [
-    { url: 'https://feeds.bbci.co.uk/news/politics/rss.xml',             source: 'BBC',            implies: 'GB' },
-    { url: 'https://www.theguardian.com/politics/rss',                   source: 'The Guardian',   implies: 'GB' },
-    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml',  source: 'New York Times', implies: 'US' },
+    { url: 'https://feeds.bbci.co.uk/news/politics/rss.xml',             source: 'BBC',            implies: 'GB', desk: true },
+    { url: 'https://www.theguardian.com/politics/rss',                   source: 'The Guardian',   implies: 'GB', desk: true },
+    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml',  source: 'New York Times', implies: 'US', desk: true },
     { url: 'https://www.euronews.com/rss?level=theme&name=news',         source: 'Euronews' },
     { url: 'https://rss.dw.com/rdf/rss-en-world',                        source: 'Deutsche Welle' },
     { url: 'https://www.arabnews.com/rss.xml',                           source: 'Arab News' },
     { url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', source: 'AllAfrica' },
     { url: 'https://en.mercopress.com/rss/',                             source: 'MercoPress' },
-    { url: 'https://indianexpress.com/section/political-pulse/feed/',    source: 'Indian Express', implies: 'IN' },
-    { url: 'https://economictimes.indiatimes.com/news/politics-and-nation/rssfeeds/1052732854.cms', source: 'Economic Times', implies: 'IN' },
-    { url: 'https://feeds.skynews.com/feeds/rss/politics.xml',           source: 'Sky News',       implies: 'GB' },
+    { url: 'https://indianexpress.com/section/political-pulse/feed/',    source: 'Indian Express', implies: 'IN', desk: true },
+    { url: 'https://economictimes.indiatimes.com/news/politics-and-nation/rssfeeds/1052732854.cms', source: 'Economic Times', implies: 'IN', desk: true },
+    { url: 'https://feeds.skynews.com/feeds/rss/politics.xml',           source: 'Sky News',       implies: 'GB', desk: true },
   ],
   world: [
-    { url: 'https://feeds.bbci.co.uk/news/world/rss.xml',                source: 'BBC' },
-    { url: 'https://www.theguardian.com/world/rss',                      source: 'The Guardian' },
+    { url: 'https://feeds.bbci.co.uk/news/world/rss.xml',                source: 'BBC',            desk: true },
+    { url: 'https://www.theguardian.com/world/rss',                      source: 'The Guardian',   desk: true },
     { url: 'https://www.aljazeera.com/xml/rss/all.xml',                  source: 'Al Jazeera' },
-    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',     source: 'New York Times' },
+    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',     source: 'New York Times', desk: true },
     { url: 'https://www.euronews.com/rss',                               source: 'Euronews' },
-    { url: 'https://rss.dw.com/rdf/rss-en-world',                        source: 'Deutsche Welle' },
+    { url: 'https://rss.dw.com/rdf/rss-en-world',                        source: 'Deutsche Welle', desk: true },
     { url: 'https://www.arabnews.com/rss.xml',                           source: 'Arab News' },
     { url: 'https://allafrica.com/tools/headlines/rdf/latest/headlines.rdf', source: 'AllAfrica' },
     { url: 'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml', source: 'Channel News Asia' },
     { url: 'https://en.mercopress.com/rss/',                             source: 'MercoPress' },
-    { url: 'https://www.abc.net.au/news/feed/45910/rss.xml',             source: 'ABC News' },
-    { url: 'https://indianexpress.com/section/world/feed/',              source: 'Indian Express' },
-    { url: 'https://feeds.skynews.com/feeds/rss/world.xml',              source: 'Sky News' },
+    { url: 'https://www.abc.net.au/news/feed/45910/rss.xml',             source: 'ABC News',       desk: true },
+    { url: 'https://indianexpress.com/section/world/feed/',              source: 'Indian Express', desk: true },
+    { url: 'https://feeds.skynews.com/feeds/rss/world.xml',              source: 'Sky News',       desk: true },
   ],
   // Macro: growth, policy, trade, industry.
   economy: [
-    { url: 'https://feeds.bbci.co.uk/news/business/economy/rss.xml',     source: 'BBC' },
-    { url: 'https://www.theguardian.com/business/economics/rss',         source: 'The Guardian' },
-    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml',   source: 'New York Times' },
+    { url: 'https://feeds.bbci.co.uk/news/business/economy/rss.xml',     source: 'BBC',            desk: true },
+    { url: 'https://www.theguardian.com/business/economics/rss',         source: 'The Guardian',   desk: true },
+    { url: 'https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml',   source: 'New York Times', desk: true },
     { url: 'https://rss.dw.com/rdf/rss-en-bus',                          source: 'Deutsche Welle' },
     { url: 'https://allafrica.com/tools/headlines/rdf/business/headlines.rdf', source: 'AllAfrica' },
     { url: 'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml', source: 'Channel News Asia' },
-    { url: 'https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms', source: 'Economic Times', implies: 'IN' },
-    { url: 'https://www.business-standard.com/rss/economy-102.rss',      source: 'Business Standard', implies: 'IN' },
-    { url: 'https://indianexpress.com/section/business/economy/feed/',   source: 'Indian Express', implies: 'IN' },
+    { url: 'https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms', source: 'Economic Times', implies: 'IN', desk: true },
+    { url: 'https://www.business-standard.com/rss/economy-102.rss',      source: 'Business Standard', implies: 'IN', desk: true },
+    { url: 'https://indianexpress.com/section/business/economy/feed/',   source: 'Indian Express', implies: 'IN', desk: true },
     { url: 'https://indianexpress.com/section/business/feed/',           source: 'Indian Express', implies: 'IN' },
   ],
   // Markets, companies and money.
@@ -107,8 +118,8 @@ export const RSS_FEEDS: Record<Segment, Feed[]> = {
     { url: 'https://rss.dw.com/rdf/rss-en-bus',                          source: 'Deutsche Welle' },
     { url: 'https://www.arabnews.com/rss.xml',                           source: 'Arab News' },
     { url: 'https://allafrica.com/tools/headlines/rdf/business/headlines.rdf', source: 'AllAfrica' },
-    { url: 'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms', source: 'Economic Times', implies: 'IN' },
-    { url: 'https://www.business-standard.com/rss/markets-106.rss',      source: 'Business Standard', implies: 'IN' },
+    { url: 'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms', source: 'Economic Times', implies: 'IN', desk: true },
+    { url: 'https://www.business-standard.com/rss/markets-106.rss',      source: 'Business Standard', implies: 'IN', desk: true },
     { url: 'https://indianexpress.com/section/business/feed/',           source: 'Indian Express', implies: 'IN' },
     { url: 'https://feeds.skynews.com/feeds/rss/business.xml',           source: 'Sky News',       implies: 'GB' },
   ],
@@ -176,6 +187,136 @@ const REPUTABLE = new Set([
 ])
 
 /**
+ * Topic vocabularies used to check an article really belongs in the section it
+ * was filed under.
+ *
+ * Until now a section was decided purely by which feed an item arrived on, and
+ * several feeds are wired into several sections at once — Arab News' site-wide
+ * feed feeds headlines, politics, world AND finance; AllAfrica's does three.
+ * So one story was filed four times and the tabs stopped meaning anything:
+ * Headlines and World came back 9-of-12 identical for the US, 10-of-12 for
+ * France. The Google News search made it worse, since its segment query is a
+ * hint to a search engine, not a guarantee about what comes back.
+ *
+ * These are deliberately broad. The job is to throw out a markets story filed
+ * under Politics, not to adjudicate borderline cases — a section that gates too
+ * hard goes empty, which is worse than one that is merely loose.
+ */
+const TOPIC_TERMS: Record<Exclude<Segment, 'headline'>, string[]> = {
+  politics: [
+    'election', 'elections', 'electoral', 'vote', 'votes', 'voted', 'voting',
+    'voter', 'voters', 'ballot', 'poll', 'polls', 'referendum', 'parliament',
+    'parliamentary', 'congress', 'congressional', 'senate', 'senator',
+    'senators', 'lawmaker', 'lawmakers', 'legislature', 'legislation',
+    'legislative', 'minister', 'ministers', 'ministry', 'cabinet',
+    'president', 'presidential', 'prime minister', 'premier', 'chancellor',
+    'governor', 'mayor', 'party', 'parties', 'coalition', 'opposition',
+    'government', 'governing', 'policy', 'impeachment', 'impeached',
+    'campaign', 'candidate', 'candidates', 'constitution', 'constitutional',
+    'supreme court', 'protest', 'protests', 'protesters', 'coup', 'junta',
+    'regime', 'democracy', 'democratic', 'republican', 'authoritarian',
+    'resign', 'resigns', 'resigned', 'resignation', 'no-confidence',
+    'assembly', 'politician', 'politicians', 'political',
+    'politics', 'shutdown', 'filibuster', 'white house',
+  ],
+  world: [
+    'diplomat', 'diplomats', 'diplomacy', 'diplomatic', 'embassy', 'ambassador',
+    'foreign minister', 'foreign ministry', 'foreign policy', 'treaty',
+    'summit', 'united nations', 'nato', 'european union', 'bilateral',
+    'negotiations', 'ceasefire', 'truce', 'war', 'warfare', 'conflict', 'military',
+    'troops', 'soldiers', 'airstrike', 'airstrikes', 'missile', 'missiles',
+    'drone', 'drones', 'border', 'borders', 'refugee', 'refugees',
+    'migration', 'migrants', 'humanitarian', 'sanctions', 'alliance',
+    'peace', 'invasion', 'invade', 'hostage', 'hostages', 'delegation',
+    'accord', 'pact', 'geopolitical', 'security council', 'peacekeeping',
+    'extradition', 'visa', 'deportation', 'deported', 'genocide', 'occupation',
+    'nuclear', 'defence', 'defense', 'envoy', 'overseas', 'airspace',
+    'warship', 'warplane', 'insurgent', 'insurgents', 'militia',
+  ],
+  economy: [
+    'economy', 'economic', 'economist', 'economists', 'gdp', 'growth',
+    'inflation', 'deflation', 'recession', 'slowdown', 'unemployment',
+    'jobless', 'employment', 'trade', 'tariff', 'tariffs', 'export',
+    'exports', 'import', 'imports', 'supply chain', 'manufacturing',
+    'factory', 'factories', 'industry', 'industrial', 'infrastructure',
+    'budget', 'deficit', 'surplus', 'debt', 'fiscal', 'subsidy', 'subsidies',
+    'productivity', 'wages', 'wage', 'cost of living', 'consumer prices',
+    'output', 'agriculture', 'farmers', 'labour market', 'labor market',
+    'investment', 'imf', 'world bank', 'austerity', 'stimulus', 'gst',
+    'taxes', 'taxation', 'spending', 'poverty', 'households',
+  ],
+  finance: [
+    'market', 'markets', 'stock', 'stocks', 'share price', 'equities',
+    'equity', 'index', 'indices', 'sensex', 'nifty', 'nasdaq', 'dow jones',
+    'ftse', 'bourse', 'bond', 'bonds', 'yield', 'yields', 'currency',
+    'currencies', 'rupee', 'dollar', 'euro', 'pound', 'yen', 'yuan', 'forex',
+    'exchange rate', 'bank', 'banks', 'banking', 'lender', 'lenders',
+    'interest rate', 'interest rates', 'rate cut', 'rate hike', 'central bank',
+    'federal reserve', 'ipo', 'earnings', 'profit', 'profits', 'revenue',
+    'shareholder', 'shareholders', 'dividend', 'crypto', 'cryptocurrency',
+    'bitcoin', 'fund', 'funds', 'investor', 'investors', 'valuation',
+    'merger', 'acquisition', 'takeover', 'trading', 'trader', 'traders',
+    'crude', 'oil prices', 'bullion', 'commodity', 'commodities', 'fintech',
+    'insurance', 'loan', 'loans', 'bankruptcy', 'payouts',
+  ],
+}
+
+/** Word-bounded matchers, built once per segment. Global, so hits are counted. */
+const TOPIC_RE = Object.fromEntries(
+  Object.entries(TOPIC_TERMS).map(([seg, terms]) => [
+    seg,
+    new RegExp(
+      `(?<!\\p{L})(?:${terms
+        .map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .sort((a, b) => b.length - a.length)
+        .join('|')})(?!\\p{L})`,
+      'giu',
+    ),
+  ]),
+) as Record<Exclude<Segment, 'headline'>, RegExp>
+
+const TOPIC_SEGMENTS = Object.keys(TOPIC_RE) as Exclude<Segment, 'headline'>[]
+
+export function topicScore(text: string, segment: Segment): number {
+  const re = TOPIC_RE[segment as Exclude<Segment, 'headline'>]
+  return re ? (text.match(re)?.length ?? 0) : 0
+}
+
+/**
+ * Does this article belong in this section?
+ *
+ * Headlines is the catch-all top-stories view and is deliberately ungated.
+ * Everywhere else the article has to score for the section AND score at least
+ * as well there as in any other — a single shared word is not enough to claim
+ * a story when another desk's vocabulary is all over it. That second half is
+ * what keeps a cost-of-living piece out of World and a budget piece out of
+ * Finance when Economy fits it better.
+ *
+ * A desk feed only skips the check when NO section claims the story: BBC
+ * Politics filing something the vocabularies don't recognise should still run
+ * under Politics, but the Guardian's world feed carrying "UK politics live"
+ * should not run under World.
+ */
+export function onTopic(a: Article, segment: Segment): boolean {
+  if (segment === 'headline') return true
+
+  const text = `${a.headline} ${a.description}`
+  const own = topicScore(text, segment)
+  const best = Math.max(...TOPIC_SEGMENTS.map(s => topicScore(text, s)))
+
+  if (own > 0) return own >= best
+  return a.fromDesk === true && best === 0
+}
+
+/**
+ * Below this, a gated section is treated as having been cut too thin and the
+ * ungated pool is used instead. A loose section beats an empty one: most of the
+ * 200 countries are covered by a handful of stories at any moment, and gating
+ * those away would leave their Economy and Finance tabs blank.
+ */
+const MIN_GATED = 4
+
+/**
  * Share of letters that are Latin. Google News search returns foreign-language
  * items (a Mongolia query surfaced a Chinese-language government page); this is
  * an English-language product, so those get dropped.
@@ -199,6 +340,94 @@ function relevanceScore(a: Article, countryCode: string): number {
   return score
 }
 
+/**
+ * Collapse key for near-identical stories.
+ *
+ * The old key — the first 70 characters, lowercased — only caught byte-exact
+ * leads. Wire copy gets lightly reworded per outlet ("Denmark stocks higher at
+ * close of trade" vs "Denmark shares higher at close of trade"), which differed
+ * at character 9 and so shipped as two cards. Reducing to a sorted set of
+ * significant words catches those while leaving genuinely different stories
+ * apart.
+ */
+const STOPWORDS = new Set([
+  'a', 'an', 'the', 'and', 'or', 'but', 'of', 'in', 'on', 'at', 'to', 'for',
+  'with', 'from', 'by', 'as', 'is', 'are', 'was', 'were', 'be', 'been', 'it',
+  'its', 'that', 'this', 'after', 'over', 'into', 'up', 'down', 'out', 'new',
+  'says', 'say', 'said', 'will', 'has', 'have', 'had', 'amid',
+])
+
+function storyTokens(headline: string): Set<string> {
+  // Percentages and index levels change between reruns of the same wire story,
+  // so numbers are dropped and only the distinct significant words are kept.
+  return new Set(
+    headline
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w)),
+  )
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  let shared = 0
+  for (const w of a) if (b.has(w)) shared++
+  const union = a.size + b.size - shared
+  return union === 0 ? 0 : shared / union
+}
+
+/**
+ * Above this, two headlines are treated as the same story. Outlets reword wire
+ * copy just enough to defeat an exact key — "Denmark stocks higher at close of
+ * trade" and "Denmark shares higher at close of trade" differ by one word and
+ * shipped as two cards. Distinct stories about the same subject land far below
+ * this: two separate Denmark economy pieces scored 0.14.
+ */
+const SAME_STORY = 0.6
+
+/**
+ * Normalised newsroom identity, used to cap how much of a section one outlet
+ * takes. Syndication networks publish the same piece under per-edition names —
+ * "Investing.com", "Investing.com UK", "Investing.com India" — which read as
+ * three newsrooms and slipped past a cap keyed on the raw string. When the name
+ * carries a domain, the domain is the identity.
+ */
+function sourceKey(source: string): string {
+  const s = source.trim().toLowerCase()
+  const domain = s.match(/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|vn|in|co|news|io|gov)\b/)
+  return domain ? domain[0] : s
+}
+
+/**
+ * Caps how much of a section any one newsroom can take.
+ *
+ * Ranking alone gave every curated item the same +4, leaving publish time to
+ * order them — so India's Headlines came back 9-of-12 Business Standard and its
+ * Politics 11-of-12 Economic Times, which reads as one outlet's wire rather
+ * than a view of the country. Ranked order is otherwise preserved; anything
+ * held back by the cap is appended afterwards, so a quiet country covered by a
+ * single outlet still fills its section instead of going half empty.
+ */
+function capPerSource(ranked: Article[], limit: number): Article[] {
+  const cap = Math.max(2, Math.ceil(limit / 4))
+  const used = new Map<string, number>()
+  const picked: Article[] = []
+  const overflow: Article[] = []
+
+  for (const a of ranked) {
+    const key = sourceKey(a.source)
+    const n = used.get(key) ?? 0
+    if (n < cap && picked.length < limit) {
+      used.set(key, n + 1)
+      picked.push(a)
+    } else {
+      overflow.push(a)
+    }
+  }
+
+  return picked.concat(overflow).slice(0, limit)
+}
+
 export interface Article {
   id: string
   headline: string
@@ -213,6 +442,8 @@ export interface Article {
   impliedCountry?: string
   /** True when the item came from the Google News search rather than a curated feed. */
   viaSearch?: boolean
+  /** True when the feed is the segment's own desk, so the topic check is skipped. */
+  fromDesk?: boolean
 }
 
 const NAMED_ENTITIES: Record<string, string> = {
@@ -337,6 +568,7 @@ async function fetchFeed(feed: Feed, segment: Segment): Promise<Article[]> {
         segment,
         impliedCountry: feed.implies,
         viaSearch: feed.dynamicSource === true,
+        fromDesk: feed.desk === true,
       }
     }).filter(a => a.headline && a.url !== '#')
   } catch {
@@ -378,21 +610,38 @@ export async function getSegmentNews(
     a.impliedCountry === code || matchesCountry(`${a.headline} ${a.description}`, code),
   )
 
-  const seen = new Set<string>()
+  const seenUrl = new Set<string>()
+  const keptTokens: Set<string>[] = []
   const deduped = matched.filter(a => {
-    const key = a.headline.toLowerCase().slice(0, 70)
-    if (seen.has(key)) return false
-    seen.add(key)
+    if (seenUrl.has(a.url)) return false
+    const tokens = storyTokens(a.headline)
+    // Very short headlines carry too little signal for a similarity test, so
+    // they fall back to the URL check alone.
+    if (tokens.size >= 4 && keptTokens.some(t => jaccard(tokens, t) >= SAME_STORY)) {
+      return false
+    }
+    seenUrl.add(a.url)
+    keptTokens.push(tokens)
     return true
   })
 
   // Drop non-English items the search surfaces for smaller countries — both
-  // foreign-language headlines and publishers we can't render legibly.
+  // foreign-language headlines and publishers we can't render legibly. Also
+  // drop government press offices: a Denmark trade story pulled in a Vietnamese
+  // ministry's own write-up of the same visit, which is PR, not reporting.
   const english = deduped.filter(
-    a => latinRatio(a.headline) >= 0.6 && latinRatio(a.source) >= 0.6,
+    a =>
+      latinRatio(a.headline) >= 0.6 &&
+      latinRatio(a.source) >= 0.6 &&
+      !/\.gov(\.[a-z]{2})?$/i.test(a.source.trim()),
   )
 
-  const ranked = [...english].sort((a, b) => {
+  // Keep only items that actually belong in this section, falling back to the
+  // ungated pool when the gate leaves too little to fill a page.
+  const gated = english.filter(a => onTopic(a, segment))
+  const pool = gated.length >= MIN_GATED ? gated : english
+
+  const ranked = [...pool].sort((a, b) => {
     const diff = relevanceScore(b, code) - relevanceScore(a, code)
     if (diff !== 0) return diff
     return (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0)
@@ -407,11 +656,11 @@ export async function getSegmentNews(
   // Prefer fresh items; fall back to best-available so a quiet country isn't blank.
   const chosen = fresh.length > 0 ? fresh : ranked
 
-  return { articles: chosen.slice(0, limit), fetchedAt: new Date().toISOString() }
+  return { articles: capPerSource(chosen, limit), fetchedAt: new Date().toISOString() }
 }
 
 export interface PulseEntry {
-  /** Segment with the most coverage for this country right now. */
+  /** Segment this country stands out in right now. */
   segment: Segment
   /** Matching articles in that segment. */
   count: number
@@ -425,6 +674,12 @@ export interface PulseEntry {
  * The map used to call /api/news once per country per segment — 49 × 5 = 245
  * round trips on every dashboard load. Here the feeds are pulled once (and are
  * cache-warm anyway) and every country is scored in memory.
+ *
+ * The winner is picked on SHARE of a segment's pool, not raw count. Headlines
+ * draws on 14 feeds while finance draws on 10, so a raw-count comparison handed
+ * headlines the win almost every time — half the live map came back the same
+ * blue. Normalising by pool size asks the sharper question: which desk is this
+ * country disproportionately showing up in?
  */
 export async function getPulseMap(
   codes: string[],
@@ -432,14 +687,19 @@ export async function getPulseMap(
   const bySegment = await Promise.all(
     SEGMENT_IDS.map(async segment => ({
       segment,
-      items: (await Promise.all((RSS_FEEDS[segment] ?? []).map(f => fetchFeed(f, segment)))).flat(),
+      // Gated the same way the country pages are, so a bubble's colour names a
+      // section the page will actually show. Ungated, an Arab News markets
+      // story counted towards Politics here and then wasn't there on the page.
+      items: (await Promise.all((RSS_FEEDS[segment] ?? []).map(f => fetchFeed(f, segment))))
+        .flat()
+        .filter(a => onTopic(a, segment)),
     })),
   )
 
   const out: Record<string, PulseEntry | null> = {}
 
   for (const code of codes) {
-    let best: { segment: Segment; count: number } | null = null
+    let best: { segment: Segment; count: number; share: number } | null = null
     let total = 0
 
     for (const { segment, items } of bySegment) {
@@ -447,12 +707,17 @@ export async function getPulseMap(
         a.impliedCountry === code || matchesCountry(`${a.headline} ${a.description}`, code),
       ).length
       total += count
-      if (!best || count > best.count) best = { segment, count }
+      if (count === 0) continue
+
+      const share = count / Math.max(items.length, 1)
+      // Share decides; raw count breaks ties so a 1-of-40 blip can't outrank
+      // a desk that genuinely filed more on this country.
+      if (!best || share > best.share || (share === best.share && count > best.count)) {
+        best = { segment, count, share }
+      }
     }
 
-    out[code] = best && best.count > 0
-      ? { segment: best.segment, count: best.count, total }
-      : null
+    out[code] = best ? { segment: best.segment, count: best.count, total } : null
   }
 
   return out

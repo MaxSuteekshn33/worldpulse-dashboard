@@ -54,25 +54,31 @@ export default function MiniMap() {
         const el = document.createElement('div')
         el.style.cssText = 'width:18px;height:18px;position:relative;pointer-events:none;'
 
+        // Only every third bubble pulses. With 200 countries on screen, ringing
+        // all of them turned the backdrop into a single shimmering mass and put
+        // 200 infinite animations behind the hero copy.
+        const pulses = i % 3 === 0
+
         const ring = document.createElement('div')
-        ring.className = 'bubble-ring'
+        if (pulses) ring.className = 'bubble-ring'
         ring.style.cssText = `
-          width:18px;height:18px;border-radius:50%;
-          border:1.5px solid ${color};
-          position:absolute;top:0;left:0;
+          width:15px;height:15px;border-radius:50%;
+          border:1.5px solid ${color}${pulses ? '' : '44'};
+          position:absolute;top:50%;left:50%;
+          transform:translate(-50%,-50%);
           animation-delay:${((i * 0.17) % 2.4).toFixed(2)}s;
         `
         // Layered glow: a tight halo for punch plus a wide soft bloom, so the
         // dot still reads against the dark landmass without blowing out.
         const dot = document.createElement('div')
         dot.style.cssText = `
-          width:7px;height:7px;border-radius:50%;
+          width:6px;height:6px;border-radius:50%;
           background:${color};
           position:absolute;top:50%;left:50%;
           transform:translate(-50%,-50%);
-          box-shadow:0 0 0 1px rgba(255,255,255,.16),
-                     0 0 7px ${color},
-                     0 0 18px ${color}99;
+          box-shadow:0 0 0 1px rgba(255,255,255,.14),
+                     0 0 6px ${color},
+                     0 0 14px ${color}88;
         `
         el.appendChild(ring)
         el.appendChild(dot)

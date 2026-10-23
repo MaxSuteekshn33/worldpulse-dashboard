@@ -40,6 +40,37 @@ revalidate on the same cadence. Three things keep the deck genuinely fresh:
 3. **Relative time computed client-side.** Only the ISO timestamp is cached;
    `<TimeAgo>` derives "18m ago" live, so a cached page never reports a stale age.
 
+### Section routing
+
+A story's section used to be decided purely by which feed it arrived on, and
+several feeds are wired into several sections at once — Arab News' site-wide
+feed supplies headlines, politics, world AND finance; AllAfrica's supplies
+three. So one story was filed three or four times and the tabs stopped meaning
+anything: Headlines and World came back 9-of-12 identical for the US and
+10-of-12 for France.
+
+Every section except Headlines now gates on the text. `TOPIC_TERMS` in
+`lib/news.ts` holds a broad vocabulary per section, and an article is kept only
+if it scores for that section **and** scores at least as well there as in any
+other. The second half is what matters: a single shared word shouldn't claim a
+story when another desk's vocabulary is all over it, which is how a
+cost-of-living piece stayed out of World and `share your views` stopped
+registering as Finance.
+
+Feeds that genuinely are one desk (`desk: true` — BBC Politics only ever files
+politics) skip the check, but only when **no** section claims the story. The
+Guardian's world feed carries UK domestic politics, and a `desk` bypass without
+that condition put "UK politics live" under World.
+
+Headlines is the catch-all top-stories view and stays ungated; it draws on
+front-page feeds rather than desk feeds for the same reason. When gating leaves
+a section under four items the ungated pool is used instead — most of the 200
+countries have only a handful of stories at any moment, and a loose section
+beats an empty one.
+
+Across five countries this cut cross-section duplicates from 114 to 33 while
+every section still filled.
+
 ### Sources
 
 Fifteen curated newsrooms, chosen for regional spread (`lib/sources.ts`):
@@ -97,14 +128,33 @@ Word boundaries alone cannot separate names nested inside other names, so
 New Guinea", "Sudan" inside "South Sudan", "Ireland" inside "Northern Ireland",
 "Mexico" inside "New Mexico", "Niger" inside "Niger Delta".
 
-A regression test walks all 200 x 199 country pairs and asserts no country's
-name matches another country's matcher.
+Excluded phrases are **scrubbed out of the text before matching**, not tested
+against it. Vetoing the whole string threw away every legitimate hit that merely
+shared a sentence with the longer name — an Ireland story that also mentioned
+Northern Ireland, a Sudan story comparing it with South Sudan. Scrubbing removes
+only the nested name, so "Papua New Guinea" still can't register as Guinea while
+"Ireland and Northern Ireland" correctly matches Ireland.
+
+### Checks
+
+```bash
+npm run check
+```
+
+Offline, no feeds fetched. Asserts every country has match terms, that each
+matches its own name, and — the part worth having — walks all 200 x 199 ordered
+country pairs asserting no country's name matches another country's matcher.
+Then a set of known traps in both directions (Oman/Romania, Mali/Somalia,
+India/Indiana, US/"told us", the nested-name pairs above) and a set of section
+routing cases. `scripts/ts-resolve.mjs` lets `node` run the TypeScript sources
+directly, so there's no test runner to install.
 
 ## Local development
 
 ```bash
 npm install
 npm run dev     # http://localhost:3000
+npm run check   # country + section matching regression checks
 ```
 
 Requires `NEXT_PUBLIC_GOOGLE_MAPS_KEY` in `.env.local`. Pull it with:
@@ -115,6 +165,29 @@ vercel env pull .env.local --environment=preview
 
 Note: the key is set for Preview and Production only — a plain `vercel env pull`
 targets Development and will appear to be missing.
+
+## Map rendering
+
+Three things the Maps JS API will not do for you:
+
+- **`backgroundColor: '#0B0B11'`.** Google paints the map div white until the
+  first tile lands. On a dark page that reads as a map that failed to load, and
+  tiles can take several seconds on a cold start.
+- **`loading=async` plus the `callback` handshake.** Google warns on every load
+  without `loading=async`, but under it the script's `onload` fires *before* the
+  `google.maps` namespace is populated — resolving there hands callers a
+  `google.maps` with no `Map` on it. `lib/loadGoogleMaps.ts` resolves on the
+  documented callback instead.
+- **Room for the attribution.** The Google logo is pinned to the map's
+  bottom-left at `z-index: 1000000` and may not be hidden, so the stats strip
+  gets out of its way — shifted right on desktop, lifted above it on compact.
+  Before that, the "200" in "200 Countries" sat underneath it.
+
+Pulse bubbles are drawn in three tiers by how much coverage a country has
+(`TIERS` in `components/WorldMap.tsx`): quiet countries are a small dim dot with
+no ring, active ones gain a static ring, and only the busiest pulse. With 200
+markers on screen, ringing and animating all of them turned the map into one
+undifferentiated shimmer and put 200 infinite animations behind the hero copy.
 
 ## Design tokens
 

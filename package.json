@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check": "node --import ./scripts/ts-resolve.mjs scripts/check-matching.mts"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.1.1",

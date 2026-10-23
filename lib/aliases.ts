@@ -253,7 +253,8 @@ function matchersFor(code: string): Matchers {
     m = {
       ci: entry ? build(entry.terms, 'iu') : null,
       cs: entry?.acronyms ? build(entry.acronyms, 'u') : null,
-      ex: entry?.excludes ? build(entry.excludes, 'iu') : null,
+      // Global: excludes are scrubbed out of the text, not tested against it.
+      ex: entry?.excludes ? build(entry.excludes, 'giu') : null,
     }
     cache.set(key, m)
   }
@@ -262,9 +263,16 @@ function matchersFor(code: string): Matchers {
 
 export function matchesCountry(text: string, countryCode: string): boolean {
   const { ci, cs, ex } = matchersFor(countryCode)
-  if (ex?.test(text)) return false
-  if (ci?.test(text)) return true
-  if (cs?.test(text)) return true
+  // Excluded phrases are blanked out before matching rather than vetoing the
+  // whole text. A veto threw away every legitimate hit that merely shared a
+  // sentence with the longer name — an Ireland story that also mentioned
+  // Northern Ireland, a Congo story naming both republics, a Sudan story
+  // comparing it with South Sudan. Blanking removes only the nested name, so
+  // "Papua New Guinea" still can't register as Guinea while "Ireland and
+  // Northern Ireland" correctly matches Ireland.
+  const scrubbed = ex ? text.replace(ex, ' ') : text
+  if (ci?.test(scrubbed)) return true
+  if (cs?.test(scrubbed)) return true
   return false
 }
 
