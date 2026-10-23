@@ -258,6 +258,31 @@ a narrow wash along the left edge when collapsed, wider and darker when open.
 The scrim used to be a radial centred on the hero, which darkened the middle of
 the map for copy that no longer sits there.
 
+## The map arrives
+
+Two pieces of motion, both on `components/WorldMap.tsx`.
+
+**The bubbles sweep in west to east.** They used to appear in a single frame,
+which read as a repaint rather than as the world reporting in. Each marker's
+entrance delay comes from its longitude (`SWEEP_MS`, 850ms end to end, plus a
+little jitter so neighbours on a meridian don't land in lockstep), and the
+sweep starts on the map's own `tilesloaded` event — bubbles arriving over a
+blank panel just look like a glitch.
+
+**A bubble that lights up gets one ring.** The long tail fills in over about
+nine batched requests, and those bubbles used to snap from grey to coloured
+with nothing to mark it. `paint()` now plays a single expanding ring when a
+country that was quiet gets a reading.
+
+Only the batch fills announce themselves. The first pass lights around a
+hundred countries at once, and a hundred simultaneous rings reads as a fault
+rather than as news arriving — so `apply()` takes an `announce` flag that only
+`fillQuiet` sets.
+
+The ring's class is removed on `animationend`. Left on, it accumulated across
+every marker ever filled — invisible, since the animation ends at zero opacity,
+but it made the live count unreadable and is not a state to leave 200 nodes in.
+
 ## The map and the pages agree
 
 The dashboard's bubbles come from `/api/pulse`, and that endpoint used to read

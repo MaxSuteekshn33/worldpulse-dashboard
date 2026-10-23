@@ -211,6 +211,21 @@ button:active, [role="button"]:active { opacity: .85; }
 }
 .bubble-ring { animation: pulse-ring 2.6s cubic-bezier(.25,.6,.35,1) infinite; }
 
+/* One-shot ring when a bubble that was quiet gets a reading.
+   Only the long-tail batch fills use it — the first paint lights ~100
+   countries at once and pinging all of them would read as a fault, not as
+   news arriving. Same translate(-50%,-50%) as the marker, for the same reason
+   pulse-ring carries it: a bare scale() would replace it. */
+@keyframes marker-ping {
+  from { opacity: .8; transform: translate(-50%, -50%) scale(.5); }
+  to   { opacity: 0;  transform: translate(-50%, -50%) scale(2.7); }
+}
+.marker-ping { animation: marker-ping .85s cubic-bezier(.2,.7,.3,1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble-ring, .marker-ping { animation: none; }
+}
+
 /* ── Motion ───────────────────────────────────────────────── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(10px); }

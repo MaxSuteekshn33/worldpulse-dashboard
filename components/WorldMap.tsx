@@ -76,13 +76,62 @@ const DARK_STYLE: google.maps.MapTypeStyle[] = [
   { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#121620' }] },
 ]
 
-interface MarkerEls { dot: HTMLElement; ring: HTMLElement; tip: HTMLElement; name: string }
+interface MarkerEls {
+  /** The marker's own box — what the entrance sweep animates. */
+  box: HTMLElement
+  dot: HTMLElement
+  ring: HTMLElement
+  /** A one-shot ring, played when a quiet bubble gets its first reading. */
+  ping: HTMLElement
+  tip: HTMLElement
+  name: string
+  /** Milliseconds into the entrance sweep this country arrives. */
+  enterDelay: number
+  /** Whether this bubble currently carries a reading, so a fill can be spotted. */
+  lit: boolean
+}
+
+/**
+ * How long the entrance sweep takes end to end.
+ *
+ * The bubbles used to appear in a single frame, which read as a repaint rather
+ * than as the world reporting in. They now arrive west to east: the delay comes
+ * from longitude, so the wave crosses the Atlantic, Europe, Asia and the
+ * Pacific in that order, with a little jitter so neighbours on the same
+ * meridian don't land in lockstep.
+ */
+const SWEEP_MS = 850
+
+function enterDelayFor(lng: number): number {
+  const west = (lng + 180) / 360
+  return Math.round(west * SWEEP_MS + Math.random() * 70)
+}
 
 /** Paints one bubble for its current pulse reading. Also used for the idle state. */
-function paint(els: MarkerEls, entry: PulseEntry | null) {
+function paint(els: MarkerEls, entry: PulseEntry | null, announce = false) {
   const count = entry?.count ?? 0
   const color = entry ? SEGMENT_COLOR[entry.segment] ?? IDLE_COLOR : IDLE_COLOR
   const t = tierFor(count, entry?.viaSearch)
+
+  // A bubble that was quiet and now isn't gets a single expanding ring, so the
+  // long tail filling in is visible as it happens rather than only in the
+  // before-and-after.
+  if (announce && entry && !els.lit) {
+    els.ping.style.borderColor = color
+    els.ping.classList.remove('marker-ping')
+    void els.ping.offsetWidth // restart the animation rather than ignore it
+    els.ping.classList.add('marker-ping')
+    // Taken off again when it finishes. Left on, the class accumulated across
+    // every marker that had ever been filled — invisible, since the animation
+    // ends at zero opacity, but 200 stale classes is not a state to leave the
+    // DOM in, and it made the live count unreadable.
+    els.ping.addEventListener(
+      'animationend',
+      () => els.ping.classList.remove('marker-ping'),
+      { once: true },
+    )
+  }
+  els.lit = entry !== null
 
   els.dot.style.width = `${t.dot}px`
   els.dot.style.height = `${t.dot}px`
@@ -120,11 +169,17 @@ export default function WorldMap() {
     let refreshTimer: ReturnType<typeof setInterval> | undefined
     let cancelled = false
 
-    /** Repaints every bubble the response mentions. */
-    function apply(pulse: Record<string, unknown>) {
+    /**
+     * Repaints every bubble the response mentions.
+     *
+     * `announce` is for the long-tail batches only. The first pass lights
+     * around a hundred countries at once, and a hundred simultaneous rings
+     * reads as a fault rather than as news arriving.
+     */
+    function apply(pulse: Record<string, unknown>, announce = false) {
       for (const [code, entry] of Object.entries(pulse)) {
         const els = markersRef.current.get(code)
-        if (els) paint(els, entry as PulseEntry | null)
+        if (els) paint(els, entry as PulseEntry | null, announce)
       }
     }
 
@@ -148,7 +203,7 @@ export default function WorldMap() {
           if (!res.ok) continue
           const data = await res.json()
           if (cancelled) return
-          apply(data.pulse ?? {})
+          apply(data.pulse ?? {}, true)
         } catch { /* leave this batch as it is and keep going */ }
       }
     }
@@ -198,12 +253,26 @@ export default function WorldMap() {
       // looking at nothing. The placeholder clears on the real signal rather
       // than a guessed timeout.
       google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
-        if (!cancelled) setTilesIn(true)
+        if (cancelled) return
+        setTilesIn(true)
+
+        // Bring the bubbles in only once there is a map under them; arriving
+        // over a blank panel just looks like a glitch.
+        const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        for (const els of markersRef.current.values()) {
+          if (!still) els.box.style.transitionDelay = `${els.enterDelay}ms`
+          els.box.style.opacity = '1'
+          els.box.style.transform = 'none'
+        }
       })
 
       COUNTRIES.forEach(country => {
         const el = document.createElement('div')
-        el.style.cssText = 'width:24px;height:24px;position:relative;cursor:pointer;'
+        el.style.cssText = `
+          width:24px;height:24px;position:relative;cursor:pointer;
+          opacity:0;transform:scale(.4);
+          transition:opacity .45s ease, transform .55s cubic-bezier(.2,1.25,.4,1);
+        `
         el.setAttribute('role', 'button')
         el.setAttribute('tabindex', '0')
         el.setAttribute('aria-label', `${country.name} — open news`)
@@ -235,9 +304,24 @@ export default function WorldMap() {
           letter-spacing:-.01em;color:#F4F6F8;white-space:nowrap;pointer-events:none;
           display:none;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.6);
         `
-        el.append(ring, dot, tip)
+        // Sits under the dot and is invisible until a fill plays it.
+        const ping = document.createElement('div')
+        ping.style.cssText = `
+          width:16px;height:16px;border-radius:50%;
+          border:1.5px solid transparent;
+          position:absolute;top:50%;left:50%;
+          transform:translate(-50%,-50%);
+          opacity:0;pointer-events:none;z-index:1;
+        `
 
-        const els: MarkerEls = { dot, ring, tip, name: country.name }
+        el.append(ping, ring, dot, tip)
+
+        const els: MarkerEls = {
+          box: el, dot, ring, ping, tip,
+          name: country.name,
+          enterDelay: enterDelayFor(country.lng),
+          lit: false,
+        }
         paint(els, null)
         markersRef.current.set(country.code, els)
 
