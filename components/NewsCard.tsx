@@ -8,9 +8,14 @@ interface Props {
   color: string
   /** Given, a plain click opens the story popup instead of leaving the page. */
   onOpen?: (trigger: HTMLElement) => void
+  /**
+   * Whether this card carries a 16:9 block at all. Decided for the whole
+   * section by StoryDeck, never per card — see the note there.
+   */
+  showImage?: boolean
 }
 
-export default function NewsCard({ article, color, onOpen }: Props) {
+export default function NewsCard({ article, color, onOpen, showImage = true }: Props) {
   const related = article.alsoReportedBy?.length ?? 0
 
   return (
@@ -33,19 +38,32 @@ export default function NewsCard({ article, color, onOpen }: Props) {
         overflow: 'hidden', textDecoration: 'none', height: '100%',
       }}
     >
-      {article.imageUrl && (
-        // Remote RSS thumbnails from many hosts — plain <img> avoids per-domain
-        // next.config image allowlisting for every newsroom CDN.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={article.imageUrl}
-          alt=""
-          loading="lazy"
-          style={{
-            width: '100%', aspectRatio: '16 / 9', objectFit: 'cover',
-            background: 'var(--surface-3)', display: 'block',
-          }}
-        />
+      {showImage && (
+        article.imageUrl ? (
+          // Remote RSS thumbnails from many hosts — plain <img> avoids per-domain
+          // next.config image allowlisting for every newsroom CDN.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={article.imageUrl}
+            alt=""
+            loading="lazy"
+            style={{
+              width: '100%', aspectRatio: '16 / 9', objectFit: 'cover',
+              background: 'var(--surface-3)', display: 'block',
+            }}
+          />
+        ) : (
+          // Stands in for the few stories without a picture in a section that
+          // mostly has them, so every card in the grid keeps the same shape.
+          <div
+            aria-hidden
+            className="dot-grid"
+            style={{
+              width: '100%', aspectRatio: '16 / 9',
+              background: `linear-gradient(135deg, ${color}1F, transparent 62%), var(--surface-3)`,
+            }}
+          />
+        )
       )}
 
       <div style={{

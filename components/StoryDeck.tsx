@@ -100,6 +100,20 @@ export default function StoryDeck({ articles, color, segmentLabel, countryName }
     }
   }, [articles])
 
+  /**
+   * Whether this section shows picture blocks at all.
+   *
+   * Feeds carry images very unevenly: a UK section comes back mostly
+   * illustrated while a Kenya one, drawn from wire desks, had a picture on
+   * exactly 1 of 25 stories. A single 16:9 banner among two dozen text cards
+   * reads as a mistake and leaves every other card in its row stretched and
+   * airy, so the decision is made once for the whole section rather than per
+   * card: if most of the section has pictures, every card gets a block (the
+   * few without get a tinted stand-in); if most doesn't, none do.
+   */
+  const illustrated = articles.filter(a => a.imageUrl).length
+  const showImages = articles.length > 0 && illustrated * 2 >= articles.length
+
   function close() {
     setOpen(null)
     trigger.current?.focus()
@@ -118,6 +132,7 @@ export default function StoryDeck({ articles, color, segmentLabel, countryName }
             key={`${a.source}-${a.url}`}
             article={a}
             color={color}
+            showImage={showImages}
             onOpen={el => { trigger.current = el; setOpen(i) }}
           />
         ))}

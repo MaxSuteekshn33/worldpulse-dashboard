@@ -105,6 +105,19 @@ bare heading.
 
 Repeated story links on a rendered country page: 3–4 → 0.
 
+## Pictures are a section-level decision
+
+Feeds carry images very unevenly. A UK section comes back mostly illustrated;
+Kenya's, drawn from wire desks, had a picture on exactly **1 of 25** stories.
+Rendering each card's image independently meant that one 16:9 banner sat among
+two dozen text cards looking like a mistake, and stretched every other card in
+its row into dead space.
+
+So `StoryDeck` decides once per section: if at least half the stories have a
+picture, every card gets a block — the few without get a tinted stand-in — and
+otherwise none do. Cards in a section are then structurally identical either
+way, which is what makes the grid read as a grid.
+
 ## Motion and loading states
 
 `globals.css` had defined `.fade-up` and `.shimmer` for a while and used
