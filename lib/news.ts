@@ -162,6 +162,7 @@ export function googleNewsFeed(countryName: string, segment: Segment): Feed {
 }
 
 export { SOURCE_COUNT } from './sources'
+import { accessFor, SOURCE_NAMES } from './sources'
 
 /**
  * Wires and national outlets whose Google News results we trust.
@@ -386,14 +387,37 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 const SAME_STORY = 0.6
 
 /**
+ * Above this, two stories are *about* the same event without being the same
+ * copy — enough to list one under the other as related coverage, not enough to
+ * drop either from the deck.
+ *
+ * One threshold was doing two jobs and only doing the first well. At 0.6 the
+ * clustering caught near-verbatim wire reprints and almost nothing else: a
+ * sample of 357 stories had a sibling 7% of the time, and those siblings were
+ * mostly the same syndicated copy under a different edition name. Two
+ * newsrooms writing up the same event in their own words land well below it.
+ *
+ * The two jobs can afford different error rates, which is why they now get
+ * different numbers. Merging two distinct stories removes one from the page
+ * and is expensive, so that stays strict. Listing a loosely-related story
+ * under "Also reported by" costs a reader one glance, so that can afford to be
+ * generous. Distinct stories on unrelated subjects score around 0.14, well
+ * clear of this.
+ */
+const RELATED_STORY = 0.42
+
+/**
  * Normalised newsroom identity, used to cap how much of a section one outlet
  * takes. Syndication networks publish the same piece under per-edition names —
  * "Investing.com", "Investing.com UK", "Investing.com India" — which read as
  * three newsrooms and slipped past a cap keyed on the raw string. When the name
  * carries a domain, the domain is the identity.
  */
-function sourceKey(source: string): string {
-  const s = source.trim().toLowerCase()
+export function sourceKey(source: string): string {
+  // A leading article is styling, not identity: feeds carry both "New York
+  // Times" and "The New York Times", and treating them as two newsrooms put
+  // the paper in its own "Also reported by" list.
+  const s = source.trim().toLowerCase().replace(/^the\s+/, '')
   const domain = s.match(/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|vn|in|co|news|io|gov)\b/)
   return domain ? domain[0] : s
 }
@@ -488,6 +512,24 @@ function capPerSource(ranked: Article[], limit: number): Article[] {
   return picked.concat(overflow).slice(0, limit)
 }
 
+/**
+ * Which other newsrooms are worth a row, when there are only three.
+ *
+ * Syndication fans a single piece out across affiliates — an NPR story lands
+ * on member stations, an AP story on local papers — and those are the same
+ * copy under new mastheads, not another newsroom's account. They can't be
+ * spotted by name, but they can be outranked: a reader who hit a paywall is
+ * looking for somewhere they recognise, so known outlets take the rows first
+ * and the rest fill what's left.
+ */
+export function relatedRank(source: string): number {
+  const key = sourceKey(source)
+  if (SOURCE_NAMES.some(n => sourceKey(n) === key)) return 0 // our own newsrooms
+  if (REPUTABLE.has(source.trim().toLowerCase())) return 1
+  if (accessFor(source)) return 2                            // one we can label
+  return 3
+}
+
 export interface Article {
   id: string
   headline: string
@@ -504,7 +546,23 @@ export interface Article {
   viaSearch?: boolean
   /** True when the feed is the segment's own desk, so the topic check is skipped. */
   fromDesk?: boolean
+  /** Other newsrooms that filed the same story, folded in by the clustering below. */
+  alsoReportedBy?: RelatedReport[]
 }
+
+/** One other newsroom's take on the same story. */
+export interface RelatedReport {
+  source: string
+  url: string
+  publishedAt: string
+}
+
+/**
+ * How many other newsrooms to carry per story. Three is what the popup can
+ * show without turning into a list, and the cluster is ranked, so these are
+ * the three that outranked the rest.
+ */
+const MAX_RELATED = 3
 
 const NAMED_ENTITIES: Record<string, string> = {
   '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&nbsp;': ' ',
@@ -593,6 +651,22 @@ function extractImage(item: RSSItem): string | undefined {
   return m?.[1]
 }
 
+/**
+ * Drops a description that only repeats the headline.
+ *
+ * Google News sets each item's description to the title followed by the
+ * publisher, so the card and the popup both showed the headline twice — once
+ * as the headline and once as the blurb, the second copy trailing an outlet
+ * name. Nothing is lost by saying nothing.
+ */
+function usefulDescription(description: string, headline: string): string {
+  const flatten = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+  const d = flatten(description)
+  const h = flatten(headline)
+  if (!d || d === h || d.startsWith(h)) return ''
+  return description
+}
+
 async function fetchFeed(feed: Feed, segment: Segment): Promise<Article[]> {
   try {
     const res = await fetch(feed.url, {
@@ -617,10 +691,14 @@ async function fetchFeed(feed: Feed, segment: Segment): Promise<Article[]> {
     return items.map((item, i): Article => {
       const source = feed.dynamicSource ? (itemSource(item) || feed.source) : feed.source
       const rawTitle = cleanText(item.title)
+      const headline = feed.dynamicSource ? stripSourceSuffix(rawTitle, source) : rawTitle
       return {
         id: `${source}-${segment}-${i}`,
-        headline: feed.dynamicSource ? stripSourceSuffix(rawTitle, source) : rawTitle,
-        description: cleanText(item.description ?? item.summary).slice(0, 180),
+        headline,
+        description: usefulDescription(
+          cleanText(item.description ?? item.summary).slice(0, 180),
+          headline,
+        ),
         source,
         url: pickLink(item) || '#',
         publishedAt: pickDate(item),
@@ -670,39 +748,103 @@ export async function getSegmentNews(
     a.impliedCountry === code || matchesCountry(`${a.headline} ${a.description}`, code),
   )
 
-  const seenUrl = new Set<string>()
-  const keptTokens: Set<string>[] = []
-  const deduped = matched.filter(a => {
-    if (seenUrl.has(a.url)) return false
-    const tokens = storyTokens(a.headline)
-    // Very short headlines carry too little signal for a similarity test, so
-    // they fall back to the URL check alone.
-    if (tokens.size >= 4 && keptTokens.some(t => jaccard(tokens, t) >= SAME_STORY)) {
-      return false
-    }
-    seenUrl.add(a.url)
-    keptTokens.push(tokens)
-    return true
-  })
-
-  // Drop non-English items the search surfaces for smaller countries — both
-  // foreign-language headlines and publishers we can't render legibly. Also
-  // drop government press offices: a Denmark trade story pulled in a Vietnamese
-  // ministry's own write-up of the same visit, which is PR, not reporting.
-  const english = deduped.filter(
+  // Non-English items and government press offices are dropped BEFORE
+  // clustering, not after. Filtering afterwards could discard the one member
+  // of a cluster that survived — its English twin having already been folded
+  // in as a sibling — and take the whole story off the page with it.
+  const english = matched.filter(
     a =>
       latinRatio(a.headline) >= 0.6 &&
       latinRatio(a.source) >= 0.6 &&
       !/\.gov(\.[a-z]{2})?$/i.test(a.source.trim()),
   )
 
+  // Cluster the retellings instead of throwing them away.
+  //
+  // This loop used to be a filter that dropped near-identical headlines, which
+  // is right for the deck — nobody wants the same wire story five times — but
+  // it was discarding the answer to "who else covered this". The duplicates
+  // now ride along on the story that outranked them, which is what powers
+  // "Also reported by" and, when the outlet you landed on is paywalled, the
+  // free way in.
+  const seenUrl = new Set<string>()
+  const kept: Article[] = []
+  const keptTokens: Set<string>[] = []
+  const related: RelatedReport[][] = []
+
+  for (const a of english) {
+    if (seenUrl.has(a.url)) continue
+    seenUrl.add(a.url)
+
+    // Very short headlines carry too little signal for a similarity test, so
+    // they stand alone rather than risk being folded into the wrong story.
+    const tokens = storyTokens(a.headline)
+    const twin = tokens.size >= 4
+      ? keptTokens.findIndex(t => jaccard(tokens, t) >= SAME_STORY)
+      : -1
+
+    if (twin === -1) {
+      kept.push(a)
+      keptTokens.push(tokens)
+      related.push([])
+      continue
+    }
+
+    // One row per newsroom, keyed the way the per-source cap keys it.
+    // Syndication networks publish per-edition names — "Investing.com",
+    // "Investing.com UK", "Investing.com India" — which are one newsroom
+    // wearing three badges. Comparing the raw strings listed all three as
+    // separate outlets, which is the opposite of what this list is for.
+    const group = related[twin]
+    const outlet = sourceKey(a.source)
+    const duplicateOutlet =
+      outlet === sourceKey(kept[twin].source) ||
+      group.some(r => sourceKey(r.source) === outlet)
+    // Gathered without a cap; which three survive is decided by rank below.
+    if (!duplicateOutlet) {
+      group.push({ source: a.source, url: a.url, publishedAt: a.publishedAt })
+    }
+  }
+
+  // Second pass, for the other kind of sibling: stories distinct enough to
+  // each keep their own place in the deck that are nonetheless the same event
+  // from another newsroom. The first pass only ever sees reprints, because
+  // anything that scored high enough to be folded in was by definition a copy.
+  for (let i = 0; i < kept.length; i++) {
+    if (keptTokens[i].size < 4) continue
+    const ownOutlet = sourceKey(kept[i].source)
+
+    for (let j = 0; j < kept.length; j++) {
+      if (i === j || keptTokens[j].size < 4) continue
+      if (jaccard(keptTokens[i], keptTokens[j]) < RELATED_STORY) continue
+
+      const outlet = sourceKey(kept[j].source)
+      if (outlet === ownOutlet) continue
+      if (related[i].some(r => sourceKey(r.source) === outlet)) continue
+
+      related[i].push({
+        source: kept[j].source,
+        url: kept[j].url,
+        publishedAt: kept[j].publishedAt,
+      })
+    }
+  }
+
+  const deduped = kept.map((a, i) => {
+    if (related[i].length === 0) return a
+    const top = [...related[i]]
+      .sort((x, y) => relatedRank(x.source) - relatedRank(y.source))
+      .slice(0, MAX_RELATED)
+    return { ...a, alsoReportedBy: top }
+  })
+
   // Keep only items that actually belong in this section. When the gate leaves
   // too little to fill a page the rest of the pool is added back, but on-topic
   // items still rank above it — replacing the gated set outright, as this used
   // to, handed Brazil a World section that was nothing but election coverage.
-  const gated = english.filter(a => onTopic(a, segment))
+  const gated = deduped.filter(a => onTopic(a, segment))
   const inGate = new Set(gated)
-  const pool = gated.length >= MIN_GATED ? gated : english
+  const pool = gated.length >= MIN_GATED ? gated : deduped
 
   const ranked = [...pool].sort((a, b) => {
     const gate = Number(inGate.has(b)) - Number(inGate.has(a))

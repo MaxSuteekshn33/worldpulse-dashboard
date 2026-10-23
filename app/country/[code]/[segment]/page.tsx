@@ -6,7 +6,7 @@ import { getCountryByCode } from '@/lib/countries'
 import { SEGMENTS, SEGMENT_IDS, getSegment, type Segment } from '@/lib/segments'
 import { getSegmentNews, REVALIDATE_SECONDS } from '@/lib/news'
 import CountrySearch from '@/components/CountrySearch'
-import NewsCard from '@/components/NewsCard'
+import StoryDeck from '@/components/StoryDeck'
 import TimeAgo from '@/components/TimeAgo'
 
 export const revalidate = 1200
@@ -186,15 +186,12 @@ export default async function SegmentPage({ params }: { params: Params }) {
             </p>
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(275px, 1fr))',
-            gap: '15px',
-          }}>
-            {articles.map(a => (
-              <NewsCard key={`${a.source}-${a.url}`} article={a} color={meta.color} />
-            ))}
-          </div>
+          <StoryDeck
+            articles={articles}
+            color={meta.color}
+            segmentLabel={meta.label}
+            countryName={country.name}
+          />
         )}
       </div>
 

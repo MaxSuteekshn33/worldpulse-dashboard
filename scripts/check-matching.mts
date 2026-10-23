@@ -14,7 +14,7 @@
  */
 import { COUNTRY_TERMS, matchesCountry, SUPPORTED_CODES } from '../lib/aliases'
 import { COUNTRIES, getCountryByCode } from '../lib/countries'
-import { onTopic, spreadTopics, topicKey, type Article } from '../lib/news'
+import { onTopic, relatedRank, sourceKey, spreadTopics, topicKey, type Article } from '../lib/news'
 import { SEGMENT_IDS, type Segment } from '../lib/segments'
 
 let failures = 0
@@ -185,6 +185,46 @@ const allWorld = spreadTopics(worldish.map(h => article(h)))
 check('a single-topic list is not dropped', allWorld.length === worldish.length)
 
 check('topicKey falls back to general', topicKey(article('Local choir wins a prize')) === 'general')
+
+// ── 7. Newsroom identity and related-coverage ranking ─────────────────────
+// Both of these shipped wrong once and were caught by eyeballing output, which
+// is not a method.
+console.log('\n7. Newsroom identity')
+
+const sameOutlet: [string, string][] = [
+  // A leading article is styling, not identity.
+  ['The New York Times', 'New York Times'],
+  ['The Guardian', 'Guardian'],
+  // Syndication networks file under per-edition names.
+  ['Investing.com UK', 'Investing.com India'],
+  ['Investing.com', 'Investing.com Canada'],
+]
+for (const [a, b] of sameOutlet) {
+  check(`"${a}" and "${b}" are one newsroom`, sourceKey(a) === sourceKey(b))
+}
+
+const differentOutlet: [string, string][] = [
+  ['BBC', 'Sky News'],
+  ['The Guardian', 'The Guardian Nigeria News'],
+  ['Reuters', 'TradingView'],
+]
+for (const [a, b] of differentOutlet) {
+  check(`"${a}" and "${b}" are different newsrooms`, sourceKey(a) !== sourceKey(b))
+}
+
+// A reader who hit a paywall wants somewhere they recognise, so the rows go to
+// known newsrooms before syndication affiliates.
+const ranked: [string, string][] = [
+  ['BBC', 'Bozeman Daily Chronicle'],
+  ['Reuters', 'KSMU Radio'],
+  ['The Guardian', 'Wyoming Public Media'],
+]
+for (const [better, worse] of ranked) {
+  check(
+    `"${better}" outranks "${worse}" for a related row`,
+    relatedRank(better) < relatedRank(worse),
+  )
+}
 
 // ── Result ────────────────────────────────────────────────────────────────
 if (failures > 0) {

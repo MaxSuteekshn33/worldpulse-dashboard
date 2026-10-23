@@ -7,7 +7,7 @@ import { SEGMENTS } from '@/lib/segments'
 import { getSegmentNews, REVALIDATE_SECONDS } from '@/lib/news'
 import CountryMapBg from '@/components/CountryMapBg'
 import CountrySearch from '@/components/CountrySearch'
-import NewsCard from '@/components/NewsCard'
+import StoryDeck from '@/components/StoryDeck'
 import SegmentNav from '@/components/SegmentNav'
 import TimeAgo from '@/components/TimeAgo'
 
@@ -246,15 +246,12 @@ export default async function CountryPage(
                 </p>
               </div>
             ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(275px, 1fr))',
-                gap: '15px',
-              }}>
-                {previews[sectionIndex].map(a => (
-                  <NewsCard key={`${a.source}-${a.url}`} article={a} color={meta.color} />
-                ))}
-              </div>
+              <StoryDeck
+                articles={previews[sectionIndex]}
+                color={meta.color}
+                segmentLabel={meta.label}
+                countryName={country.name}
+              />
             )}
           </section>
         ))}

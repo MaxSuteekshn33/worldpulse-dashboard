@@ -105,6 +105,67 @@ bare heading.
 
 Repeated story links on a rendered country page: 3–4 → 0.
 
+## The story popup
+
+Clicking a headline opens `components/StoryModal.tsx` rather than leaving the
+page: source and time, the headline, section and country chips, the blurb where
+there is one, **Also reported by**, and a "Read full story" button to the
+original. Esc, the X and the backdrop close it; arrow keys and the footer
+buttons move through the section without closing; focus is trapped while it's
+open and returned to the card that opened it. On a phone it's a bottom sheet
+you can drag down to dismiss.
+
+A plain left click opens the popup. A modified or middle click is left alone —
+that gesture means "open the publisher in a new tab", and the `href` is still
+there to do it.
+
+### Also reported by, and the way past a paywall
+
+A paywall on the outlet you happened to land on is not a paywall on the story.
+`lib/sources.ts` records how much of each publisher's journalism is reachable
+without paying (`free` / `metered` / `subscription`), every sibling row carries
+that label, and when the outlet you're reading is paywalled and one that ran
+the same story isn't, the popup says so and links there.
+
+Two things this is **not**: it never routes around a publisher's paywall (no
+archive mirrors, no AMP tricks, no referrer games), and the badge describes the
+*publisher's* general policy, never a promise about one article.
+
+### Clustering: two thresholds, not one
+
+The clustering that powers this already existed — it was being used to *drop*
+near-identical wire copy from the deck, and the duplicates were thrown away.
+They're now kept and attached to the story that outranked them.
+
+That alone wasn't enough. One threshold was doing two jobs and only doing the
+first well: at `SAME_STORY` (0.6) the clustering caught near-verbatim reprints
+and almost nothing else, so a sample of 357 stories had a sibling **7%** of the
+time. Two newsrooms writing up the same event in their own words land well
+below 0.6.
+
+The two jobs can afford different error rates. Merging two distinct stories
+removes one from the page, so that stays at 0.6. Listing a loosely-related
+story costs a reader one glance, so `RELATED_STORY` (0.42) decides that, in a
+second pass over the stories that each kept their place. Coverage went 7% →
+**12%**, with the matches still being the same real events.
+
+Three more things that had to be right, each of which shipped wrong first and
+is now in `npm run check`:
+
+- **Syndicated editions are one newsroom.** "Investing.com", "Investing.com
+  UK" and "Investing.com India" were listed as three outlets.
+- **A leading article is styling, not identity.** "New York Times" and "The New
+  York Times" are the same paper; before `sourceKey` stripped the article, the
+  NYT appeared in its own "Also reported by".
+- **Known newsrooms take the rows first.** Syndication fans one piece across
+  affiliates — an NPR story onto member stations, an AP story onto local
+  papers. Those can't be spotted by name, but they can be outranked, so with
+  only three rows a reader gets BBC before Wyoming Public Media.
+
+Google News also sets each item's description to the title plus the publisher,
+so cards and popups were printing the headline twice; a description that only
+repeats the headline is now dropped.
+
 ## The dashboard's call to action
 
 `components/CountryPanel.tsx` — a panel that slides out of the left edge,
