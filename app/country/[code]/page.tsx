@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { ArrowLeft, ArrowRight, Newspaper } from 'lucide-react'
-import { COUNTRIES, getCountryByCode, getCountryZoom } from '@/lib/countries'
+import { FEATURED_CODES, getCountryByCode, getCountryZoom } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
 import { getSegmentNews, REVALIDATE_SECONDS } from '@/lib/news'
 import CountryMapBg from '@/components/CountryMapBg'
@@ -14,8 +14,14 @@ import TimeAgo from '@/components/TimeAgo'
 /** Re-render from fresh feeds every 20 minutes. */
 export const revalidate = 1200
 
+/**
+ * Only the featured countries are built ahead of time; `dynamicParams` is on by
+ * default, so the other 195 render on first request and are then cached on the
+ * same 20-minute cycle. See FEATURED_CODES for why building all of them was
+ * worse than building none.
+ */
 export function generateStaticParams() {
-  return COUNTRIES.map(c => ({ code: c.code }))
+  return FEATURED_CODES.map(code => ({ code }))
 }
 
 export async function generateMetadata(
@@ -64,13 +70,13 @@ export default async function CountryPage(
    * A thin section is shown short rather than padded back up to five with
    * stories the reader has just read — padding was the first thing tried here
    * and it put three repeats on Brazil's page, which reads as a bug rather than
-   * as a quiet news day. A section with nothing left at all still shows its top
-   * story, so the heading is never left standing over nothing.
+   * as a quiet news day. A section with nothing left at all says so, which is
+   * still better than repeating: the heading never stands over nothing, and
+   * "see all" is right there for the full list.
    */
   const shown = new Set<string>()
   const previews = results.map(({ articles }) => {
-    const unseen = articles.filter(a => !shown.has(a.url))
-    const preview = unseen.length > 0 ? unseen.slice(0, PREVIEW) : articles.slice(0, 1)
+    const preview = articles.filter(a => !shown.has(a.url)).slice(0, PREVIEW)
     for (const a of preview) shown.add(a.url)
     return preview
   })
@@ -221,7 +227,7 @@ export default async function CountryPage(
               )}
             </div>
 
-            {articles.length === 0 ? (
+            {previews[sectionIndex].length === 0 ? (
               <div style={{
                 border: '1px dashed var(--border-mid)', borderRadius: '13px',
                 padding: '30px 22px', textAlign: 'center',
@@ -229,11 +235,14 @@ export default async function CountryPage(
               }}>
                 <Newspaper size={19} strokeWidth={2} color="var(--text-4)" />
                 <p style={{ fontSize: '14.5px', fontWeight: 500, color: 'var(--text-2)' }}>
-                  No {meta.label.toLowerCase()} coverage for {country.name} right now
+                  {articles.length === 0
+                    ? `No ${meta.label.toLowerCase()} coverage for ${country.name} right now`
+                    : `Every ${meta.label.toLowerCase()} story is already above`}
                 </p>
                 <p style={{ fontSize: '13px', color: 'var(--text-4)', maxWidth: '420px' }}>
-                  Our newsrooms haven&apos;t filed a matching story in the last few days.
-                  This refreshes every 20 minutes.
+                  {articles.length === 0
+                    ? 'Our newsrooms haven\u2019t filed a matching story in the last few days. This refreshes every 20 minutes.'
+                    : `All ${articles.length} of them ran in an earlier section on this page.`}
                 </p>
               </div>
             ) : (

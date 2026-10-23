@@ -99,11 +99,39 @@ with.
 A thin section is shown short rather than padded back up to five with stories
 the reader has just read. Padding was tried first and put three repeats on
 Brazil's page on a build where its feeds came back nearly empty, which reads as
-a bug rather than as a quiet news day. A section with nothing left at all still
-shows its top story, so a heading never stands over nothing.
+a bug rather than as a quiet news day. A section whose stories all ran higher up
+says exactly that and links to its full list, which beats both repeating and a
+bare heading.
 
-Repeated story links on a rendered country page: 3–4 → 0, with all 25 cards
-still filled, Luxembourg and Mongolia included.
+Repeated story links on a rendered country page: 3–4 → 0.
+
+## Why only five countries are prerendered
+
+`generateStaticParams` returns `FEATURED_CODES`, not all 200. Building every
+country page was actively harmful.
+
+Most of the 200 have no curated-wire coverage at all, so their only source is
+the per-country Google News search — and Google rate-limits it. A build that
+prerenders 200 country pages fires roughly a thousand of those searches in a
+few seconds and gets a `302` to `google.com/sorry/`, which follows through to an
+HTML page the feed parser reads as zero items. Whatever a page got at build is
+then frozen until its next revalidation, so the small countries shipped as "no
+coverage" pages while `/api/news` was returning plenty for them at that same
+moment: Luxembourg, Slovenia, Paraguay and Uruguay all rendered empty, with
+Malta at one story and Latvia at five.
+
+Built on demand, one page per request, the searches are spread out and the
+feeds answer. The build drops from 208 pages in ~26s to 13 in ~3s, and a cold
+country page renders in 1–2s before being cached on the usual 20-minute cycle.
+The `[segment]` pages were already on demand for a related reason.
+
+> The rate limit is easy to trip from a dev machine too — if every country
+> suddenly returns nothing locally, check for the `/sorry/` redirect before
+> suspecting the matching code:
+>
+> ```bash
+> curl -sI "https://news.google.com/rss/search?q=%22France%22" | head -1
+> ```
 
 ### Sources
 

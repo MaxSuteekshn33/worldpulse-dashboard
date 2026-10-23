@@ -3,14 +3,14 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useEffect } from 'react'
 import CountrySearch from '@/components/CountrySearch'
-import { COUNTRIES } from '@/lib/countries'
+import { COUNTRIES, FEATURED_CODES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
 import { SOURCE_COUNT } from '@/lib/sources'
 import { useIsCompact } from '@/lib/useMediaQuery'
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false })
 
-const QUICK_PICKS = ['IN', 'US', 'GB', 'CN', 'RU']
+const QUICK_PICKS = FEATURED_CODES
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (

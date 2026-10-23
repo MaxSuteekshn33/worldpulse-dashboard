@@ -216,6 +216,20 @@ export const COUNTRIES: CountryMeta[] = [
 
 const BY_CODE = new Map(COUNTRIES.map(c => [c.code, c]))
 
+/**
+ * The handful of countries that get prerendered at build time and offered as
+ * one-tap jumps on the dashboard. Everything else renders on demand.
+ *
+ * Prerendering all 200 was a mistake: each page pulls 5 segments across 11-15
+ * feeds, and 9 build workers doing that at once made the newsrooms rate-limit
+ * or time out. Whatever a page got at build was then frozen until its next
+ * revalidation, so smaller countries shipped empty — Luxembourg, Slovenia,
+ * Paraguay and Uruguay all rendered "no coverage" pages while /api/news was
+ * returning plenty for them at the same moment. Built on demand, one page at a
+ * time, the feeds answer.
+ */
+export const FEATURED_CODES = ['IN', 'US', 'GB', 'CN', 'RU'] as const
+
 export function getCountryByCode(code: string): CountryMeta | undefined {
   return BY_CODE.get(code.toUpperCase())
 }
