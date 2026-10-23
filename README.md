@@ -271,6 +271,26 @@ a narrow wash along the left edge when collapsed, wider and darker when open.
 The scrim used to be a radial centred on the hero, which darkened the middle of
 the map for copy that no longer sits there.
 
+## The landing page shows its work
+
+The hero said *"The world is happening. Track it live."* over a decorative map
+with nothing on the page to back it up — a visitor had to search before seeing
+that the product had any content at all.
+
+A **Live now** strip above the stats carries the current top story from each
+featured country: flag, headline, how long ago, linking into that country's
+page. Three on desktop, one on a phone, each truncating rather than wrapping,
+so the page stays exactly one screen at both sizes.
+
+That meant splitting the route. `app/page.tsx` is now a thin server component
+whose only job is fetching those stories; the page itself still renders in
+`components/Landing.tsx`, which needs the viewport hook and so stays on the
+client. It only asks for `FEATURED_CODES` and only their top story each —
+those five country pages are prerendered anyway, so the feeds are already being
+fetched and Next's cache makes this close to free.
+
+The stats strip also counts up now, as the dashboard's already did.
+
 ## The map is one tab stop
 
 Every marker used to carry `tabindex="0"`, so a keyboard user tabbed through
