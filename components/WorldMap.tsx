@@ -39,8 +39,21 @@ const TIERS: Record<'quiet' | 'active' | 'hot', Tier> = {
   hot:    { dot: 9,   ring: 23, ringAlpha: '99', pulse: true  },
 }
 
-function tierFor(count: number): Tier {
-  if (count >= 4) return TIERS.hot
+/**
+ * The two halves of the map are not on the same scale.
+ *
+ * A curated count is a share of a few hundred wire stories, so 4+ really does
+ * mean "a lot is happening here". A search count is a share of the ~100 items
+ * Google returns for any country that exists, so it clears 4 for everywhere
+ * from Luxembourg to Tuvalu. Ranked together, the long tail would outshout the
+ * countries actually leading the news.
+ *
+ * So the pulsing `hot` tier stays reserved for the wires. A search reading says
+ * "there is coverage here, and it leans this way", which is `active` — a solid
+ * dot and a ring, no animation.
+ */
+function tierFor(count: number, viaSearch = false): Tier {
+  if (count >= 4 && !viaSearch) return TIERS.hot
   if (count >= 1) return TIERS.active
   return TIERS.quiet
 }
@@ -69,7 +82,7 @@ interface MarkerEls { dot: HTMLElement; ring: HTMLElement; tip: HTMLElement; nam
 function paint(els: MarkerEls, entry: PulseEntry | null) {
   const count = entry?.count ?? 0
   const color = entry ? SEGMENT_COLOR[entry.segment] ?? IDLE_COLOR : IDLE_COLOR
-  const t = tierFor(count)
+  const t = tierFor(count, entry?.viaSearch)
 
   els.dot.style.width = `${t.dot}px`
   els.dot.style.height = `${t.dot}px`

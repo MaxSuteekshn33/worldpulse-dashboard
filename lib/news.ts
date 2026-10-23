@@ -733,6 +733,14 @@ export interface PulseEntry {
   count: number
   /** Matching articles across all segments. */
   total: number
+  /**
+   * True when this reading came from the per-country search rather than the
+   * curated wires. The two are not on the same scale — a search returns around
+   * a hundred items for any country that exists, while a curated count is a
+   * share of a few hundred wire stories — so the map must not rank one against
+   * the other. See `tierFor` in WorldMap.
+   */
+  viaSearch?: boolean
 }
 
 /**
@@ -780,12 +788,17 @@ export async function getSearchPulse(
       )
       if (matched.length === 0) return [country.code, null]
 
+      // Only the classified stories get a vote. Counting `general` alongside
+      // them made it win almost every time — most headlines use none of the
+      // section vocabularies — and every long-tail country came back
+      // "headlines", which would have painted that whole half of the map one
+      // colour. Falling back to headlines when NOTHING classifies is right;
+      // letting the unclassified outvote the classified is not.
       const counts = new Map<Segment, number>()
       for (const a of matched) {
         const key = topicKey(a)
-        // Anything no section's vocabulary claims is a top story, not a gap.
-        const segment = (key === 'general' ? 'headline' : key) as Segment
-        counts.set(segment, (counts.get(segment) ?? 0) + 1)
+        if (key === 'general') continue
+        counts.set(key as Segment, (counts.get(key as Segment) ?? 0) + 1)
       }
 
       let best: Segment = 'headline'
@@ -797,7 +810,15 @@ export async function getSearchPulse(
         }
       }
 
-      return [country.code, { segment: best, count: bestCount, total: matched.length }]
+      return [
+        country.code,
+        {
+          segment: best,
+          count: bestCount || matched.length,
+          total: matched.length,
+          viaSearch: true,
+        },
+      ]
     }),
   )
 

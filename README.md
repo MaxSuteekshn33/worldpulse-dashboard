@@ -136,6 +136,22 @@ unsegmented query is the broadest net, and the stories that come back are sorted
 with `topicKey` — the same vocabulary the country pages file by. So a bubble's
 colour and the sections behind it now come from one classifier instead of two.
 
+Two things this got wrong on the first pass, both caught against the live
+deployment:
+
+- **Only classified stories vote.** Counting `general` alongside the rest let it
+  win almost every time, because most headlines use none of the section
+  vocabularies — every long-tail country came back "headlines", which would have
+  painted that half of the map a single colour. Headlines is still the fallback
+  when *nothing* classifies; it just can't outvote the sections that do.
+- **The two halves are not on one scale.** A curated count is a share of a few
+  hundred wire stories, so 4+ genuinely means a lot is happening. A search count
+  is a share of the ~100 items Google returns for any country that exists, so it
+  clears 4 for everywhere from Luxembourg to Tuvalu. Ranked together the long
+  tail would outshout the countries actually leading the news, so the pulsing
+  `hot` tier stays reserved for wire readings; a search reading renders
+  `active` — a solid dot and a ring, no animation.
+
 ## Why only five countries are prerendered
 
 `generateStaticParams` returns `FEATURED_CODES`, not all 200. Building every
