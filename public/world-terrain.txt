@@ -1,7 +1,9 @@
 world-terrain.webp
 ------------------
 NASA Blue Marble Next Generation with topography and bathymetry (December
-2004), 5400x2700, downscaled to 3200x1600 and encoded as WebP at q68.
+2004), 5400x2700, downscaled to 4608x2304 and encoded as WebP at q66. At the deepest zoom
+the loading screen uses (20x, an 18-degree frame) this is indistinguishable
+from the full 5400px source, which costs 260KB more.
 
 Source: https://visibleearth.nasa.gov/images/73909
 NASA imagery is in the public domain.
