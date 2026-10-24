@@ -6,6 +6,7 @@ import Link from '@/components/FastLink'
 import { useEffect, useState } from 'react'
 import CountryPanel from '@/components/CountryPanel'
 import LayerTabs, { type Layer } from '@/components/LayerTabs'
+import ShippingLegend from '@/components/ShippingLegend'
 import CountUp from '@/components/CountUp'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
@@ -140,8 +141,19 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* Legend */}
-        {!isCompact && (
+        {/* Legend — the shipping layer brings its own, because the news
+            colours describe nothing on it. */}
+        {layer === 'shipping' && (
+          <div style={{
+            marginLeft: isCompact ? 0 : 'auto',
+            paddingLeft: isCompact ? 0 : '20px',
+            borderLeft: isCompact ? 'none' : '1px solid var(--border)',
+          }}>
+            <ShippingLegend compact={isCompact} />
+          </div>
+        )}
+
+        {layer === 'news' && !isCompact && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: '15px',
             marginLeft: 'auto', paddingLeft: '20px',

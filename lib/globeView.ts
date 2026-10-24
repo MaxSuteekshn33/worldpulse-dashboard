@@ -79,6 +79,13 @@ export interface GlobeViewHost {
 }
 
 export interface GlobeView {
+  /**
+   * Where a point on the Earth is right now, in CSS pixels.
+   *
+   * Exposed so the page can work out what was clicked without having to know
+   * the camera angle — which only this knows, and which changes every frame.
+   */
+  project(lat: number, lon: number): { x: number; y: number; front: boolean }
   /** Swaps which set of markers rides on the sphere, when the layer changes. */
   setMarkers(next: Map<string, GlobeMarker>): void
   /** Redraws once without waiting for the clock — after a layer change. */
@@ -234,6 +241,10 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
   stage.addEventListener('pointercancel', onPointerUp)
 
   return {
+    project(lat, lon) {
+      return projectToScreen(lat, lon, tilt, spin, cssCx, cssCy, cssRadius)
+    },
+
     setMarkers(next) {
       // The set leaving the sphere keeps whatever it was last given; it is
       // hidden by the caller, not unpositioned here.

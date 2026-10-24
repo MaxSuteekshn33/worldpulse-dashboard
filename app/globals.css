@@ -651,3 +651,33 @@ button:active, [role="button"]:active { opacity: .85; }
   outline: 2px solid var(--accent-bright);
   outline-offset: 2px;
 }
+
+/* ---- Sea detail ----
+ * What a chokepoint or a ship says when you click it. The shipping layer was
+ * a picture without this: lines and diamonds that answered nothing.
+ */
+.sea-detail {
+  width: min(320px, calc(100vw - 32px));
+  padding: 16px 17px 17px;
+  border-radius: 15px;
+  border: 1px solid var(--border-mid);
+  background: rgba(8, 8, 12, .93);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .55);
+}
+
+.sea-detail-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+  transition: color .2s ease, background .2s ease;
+}
+.sea-detail-close:hover { color: var(--text); background: rgba(255, 255, 255, .06); }
+.sea-detail-close:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }

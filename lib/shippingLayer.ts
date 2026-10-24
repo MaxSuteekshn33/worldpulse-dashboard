@@ -68,7 +68,10 @@ export interface ChokeMarker {
 }
 
 /** The marker DOM, built once and reused by both views. */
-export function createChokeMarkers(points: Chokepoint[]): Map<string, ChokeMarker> {
+export function createChokeMarkers(
+  points: Chokepoint[],
+  onPick?: (id: string) => void,
+): Map<string, ChokeMarker> {
   const out = new Map<string, ChokeMarker>()
 
   for (const p of points) {
@@ -99,6 +102,16 @@ export function createChokeMarkers(points: Chokepoint[]): Map<string, ChokeMarke
     box.append(dot, tip)
     box.addEventListener('mouseenter', () => { tip.style.display = 'block' })
     box.addEventListener('mouseleave', () => { tip.style.display = 'none' })
+    if (onPick) {
+      box.style.cursor = 'pointer'
+      box.setAttribute('role', 'button')
+      box.setAttribute('tabindex', '0')
+      box.addEventListener('click', e => { e.stopPropagation(); onPick(p.id) })
+      box.addEventListener('keydown', e => {
+        const ev = e as KeyboardEvent
+        if (ev.key === 'Enter' || ev.key === ' ') { e.preventDefault(); onPick(p.id) }
+      })
+    }
 
     const m: ChokeMarker = { box, dot, tip, id: p.id, name: p.name, lat: p.lat, lng: p.lon }
     paintChoke(m, null, p)

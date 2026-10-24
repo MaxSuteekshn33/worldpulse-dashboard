@@ -101,6 +101,43 @@ export interface Vessel {
   course: number
   /** Speed over ground, knots. */
   speed: number
+  /**
+   * Where the ship says it is going, and what it is.
+   *
+   * These ride on a different AIS message from the position — static data is
+   * broadcast every few minutes rather than every few seconds — so a vessel
+   * seen only briefly may have a position and nothing else. Optional for that
+   * reason, not because they are unimportant: "where is it going" is the first
+   * thing anyone asks of a ship on a map.
+   */
+  destination?: string
+  kind?: string
+  /** Metres, from the AIS dimension fields. */
+  length?: number
+}
+
+/**
+ * What a ship is, from the AIS type code.
+ *
+ * The codes are banded: the tens digit is the category and the units digit is
+ * usually a cargo hazard class nobody needs here.
+ */
+export function shipKind(type: number | undefined): string | undefined {
+  if (typeof type !== 'number' || type <= 0) return undefined
+  if (type >= 80 && type <= 89) return 'Tanker'
+  if (type >= 70 && type <= 79) return 'Cargo'
+  if (type >= 60 && type <= 69) return 'Passenger'
+  if (type >= 40 && type <= 49) return 'High-speed craft'
+  if (type === 30) return 'Fishing'
+  if (type === 31 || type === 32 || type === 52) return 'Tug'
+  if (type === 35) return 'Military'
+  if (type === 36) return 'Sailing'
+  if (type === 37) return 'Pleasure craft'
+  if (type === 50) return 'Pilot'
+  if (type === 51) return 'Search and rescue'
+  if (type === 55) return 'Law enforcement'
+  if (type >= 33 && type <= 34) return 'Dredger'
+  return 'Other'
 }
 
 /** `[[[north, west], [south, east]], ...]` — AISStream's own corner order. */
@@ -116,7 +153,77 @@ export function watchBoxes(): number[][][] {
 interface RawMessage {
   MessageType?: string
   MetaData?: { MMSI?: number; ShipName?: string; latitude?: number; longitude?: number; Latitude?: number; Longitude?: number }
-  Message?: { PositionReport?: { Cog?: number; Sog?: number; UserID?: number; Latitude?: number; Longitude?: number } }
+  Message?: {
+    PositionReport?: { Cog?: number; Sog?: number; UserID?: number; Latitude?: number; Longitude?: number }
+    ShipStaticData?: {
+      UserID?: number
+      Destination?: string
+      Type?: number
+      Dimension?: { A?: number; B?: number; C?: number; D?: number }
+    }
+  }
+}
+
+/** The slower-moving half of a ship's story: what it is and where it is bound. */
+export interface ShipFacts {
+  destination?: string
+  kind?: string
+  length?: number
+}
+
+/**
+ * What we know about ships, kept between captures.
+ *
+ * Static data is broadcast every few minutes while positions come every few
+ * seconds, so a single seven-second window almost never catches both for the
+ * same vessel — measured, 4 of 48 static senders also sent a position in the
+ * same window. Asking each capture to identify its own ships therefore fails
+ * almost always, which is why nothing had a destination.
+ *
+ * Remembering instead costs nothing and fills in: a ship identified on one
+ * capture stays identified on the next. The cap is a safeguard, not a tuning
+ * knob — this is a few dozen bytes a ship and it only grows while someone is
+ * watching.
+ */
+const KNOWN = new Map<number, ShipFacts>()
+const KNOWN_CAP = 5000
+
+function remember(mmsi: number, facts: ShipFacts) {
+  // Nothing useful arrived, so do not displace something that did.
+  if (!facts.destination && !facts.kind && !facts.length) return
+  if (KNOWN.size >= KNOWN_CAP) {
+    const oldest = KNOWN.keys().next().value
+    if (oldest !== undefined) KNOWN.delete(oldest)
+  }
+  KNOWN.set(mmsi, { ...KNOWN.get(mmsi), ...facts })
+}
+
+/** Pulls the static details out of a frame, or null if it carries none. */
+export function readShipStatic(raw: RawMessage): { mmsi: number; facts: ShipFacts } | null {
+  if (raw.MessageType !== 'ShipStaticData') return null
+  const d = raw.Message?.ShipStaticData
+  const mmsi = d?.UserID ?? raw.MetaData?.MMSI
+  if (!d || typeof mmsi !== 'number') return null
+
+  // AIS gives the hull as distances from the transponder to bow, stern and
+  // each side; bow plus stern is the length.
+  const bow = d.Dimension?.A
+  const stern = d.Dimension?.B
+  const length = typeof bow === 'number' && typeof stern === 'number' ? bow + stern : undefined
+
+  // Destinations are free text typed by crews: padded, sometimes '@@@@', often
+  // shouted. Anything that is not letters and a few separators is not a place.
+  const raw_dest = (d.Destination ?? '').replace(/[@_]+/g, ' ').trim()
+  const destination = /[A-Za-z]{2}/.test(raw_dest) ? raw_dest.slice(0, 40) : undefined
+
+  return {
+    mmsi,
+    facts: {
+      destination,
+      kind: shipKind(d.Type),
+      length: length && length > 0 ? length : undefined,
+    },
+  }
 }
 
 /**
@@ -163,6 +270,9 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
   const decoder = new TextDecoder()
   return new Promise(resolve => {
     const seen = new Map<number, Vessel>()
+    // Static data arrives on its own schedule, minutes apart, so it is kept
+    // separately and folded in at the end rather than waited for.
+    const facts = new Map<number, ShipFacts>()
     let socket: WebSocket | null = null
     let done = false
 
@@ -171,8 +281,14 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
       done = true
       clearTimeout(timer)
       try { socket?.close() } catch { /* already gone */ }
-      const watched = CHOKEPOINTS.filter(c => WATCHED.has(c.id))
-      resolve([...seen.values()].filter(v => worthDrawing(v, watched.map(c => ({ lat: c.lat, lon: c.lon })))))
+      const watched = CHOKEPOINTS.filter(c => WATCHED.has(c.id)).map(c => ({ lat: c.lat, lon: c.lon }))
+      // This capture's own static data first, then anything learned earlier.
+      const merged = [...seen.values()].map(v => ({
+        ...v,
+        ...(KNOWN.get(v.mmsi) ?? {}),
+        ...(facts.get(v.mmsi) ?? {}),
+      }))
+      resolve(merged.filter(v => worthDrawing(v, watched)))
     }
 
     // The only hard deadline: whatever happens to the socket, the route
@@ -199,7 +315,9 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
       socket?.send(JSON.stringify({
         APIKey: apiKey,
         BoundingBoxes: watchBoxes(),
-        FilterMessageTypes: ['PositionReport'],
+        // Positions say where; static data says what and where bound. Both,
+        // because a dot you cannot ask anything about is not a tracker.
+        FilterMessageTypes: ['PositionReport', 'ShipStaticData'],
       }))
     }
 
@@ -208,10 +326,13 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
         const text = typeof event.data === 'string'
           ? event.data
           : decoder.decode(event.data as ArrayBuffer)
-        const vessel = readPositionReport(JSON.parse(text))
+        const frame = JSON.parse(text)
+        const vessel = readPositionReport(frame)
         // Last position wins: a vessel reporting twice in the window has
         // moved, and the newer fix is the one to draw.
-        if (vessel) seen.set(vessel.mmsi, vessel)
+        if (vessel) { seen.set(vessel.mmsi, vessel); return }
+        const stat = readShipStatic(frame)
+        if (stat) { facts.set(stat.mmsi, stat.facts); remember(stat.mmsi, stat.facts) }
       } catch { /* a frame we cannot read is not a reason to lose the rest */ }
     }
 

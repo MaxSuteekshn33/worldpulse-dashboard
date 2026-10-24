@@ -11,7 +11,8 @@ import { CHOKEPOINTS } from '@/lib/chokepoints'
 import type { Layer } from '@/components/LayerTabs'
 import type { ChokepointReading } from '@/lib/shipping'
 import type { Vessel } from '@/lib/vessels'
-import { createVesselOverlay, drawVessels } from '@/lib/vesselLayer'
+import { type Trails, createVesselOverlay, drawTrails, drawVessels, extendTrails } from '@/lib/vesselLayer'
+import { ChokepointDetail, ShipDetail } from '@/components/SeaDetail'
 import {
   type ChokeMarker,
   createChokeMarkers,
@@ -248,6 +249,16 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   const vesselOverlayRef = useRef<(google.maps.OverlayView & { redraw: () => void }) | null>(null)
   // Only the summary is state: it changes once a capture, not once a ship.
   const [fleet, setFleet] = useState<{ count: number; configured: boolean } | null>(null)
+  const [vessels, setVessels] = useState<Vessel[]>([])
+  const [readings, setReadings] = useState<Map<string, ChokepointReading>>(new Map())
+  const [picked, setPicked] = useState<{ kind: 'choke'; id: string } | { kind: 'ship'; mmsi: number } | null>(null)
+  const trailsRef = useRef<Trails>(new Map())
+  const capturedRef = useRef(0)
+  // Read inside the draw loops, which must not be rebuilt when it changes —
+  // mirrored through a ref rather than captured, and synced after the render
+  // rather than during it.
+  const pickedRef = useRef(picked)
+  useEffect(() => { pickedRef.current = picked }, [picked])
   const router = useRouter()
   const isCompact = useIsCompact()
   // Stable: NavTransition memoises it on the router, so naming it as a
@@ -560,15 +571,18 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       drawOverlay: (ctx, project, radius) => {
         if (layerRef.current !== 'shipping') return
         drawLanesOnGlobe(ctx, project, radius)
-        drawVessels(
-          ctx,
-          (lat, lon) => {
-            const p = project(lat, lon)
-            return p.front ? p : null
-          },
-          vesselsRef.current,
-          Math.max(0.55, radius / 240),
-        )
+        const place = (lat: number, lon: number) => {
+          const p = project(lat, lon)
+          return p.front ? p : null
+        }
+        const scale = Math.max(0.55, radius / 240)
+        const hours = capturedRef.current
+          ? (Date.now() - capturedRef.current) / 3_600_000
+          : 0
+        drawTrails(ctx, place, trailsRef.current, scale)
+        const sel = pickedRef.current
+        drawVessels(ctx, place, vesselsRef.current, scale, hours,
+          sel?.kind === 'ship' ? sel.mmsi : undefined)
       },
     })
     return globeRef.current
@@ -612,6 +626,24 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     if (where === 'pane') mapRef.current?.panBy(0, 0)
   }
 
+  /** The ship closest to a point, within a tolerance in degrees. */
+  function nearestVessel(lat: number, lon: number, within: number): Vessel | null {
+    let best: Vessel | null = null
+    let bestD = within
+    for (const v of vesselsRef.current) {
+      const d = Math.hypot(v.lat - lat, (v.lon - lon) * Math.cos((lat * Math.PI) / 180))
+      if (d < bestD) { bestD = d; best = v }
+    }
+    return best
+  }
+
+  /** Nautical miles between two points, near enough at these distances. */
+  function milesBetween(aLat: number, aLon: number, bLat: number, bLon: number) {
+    const dLat = bLat - aLat
+    const dLon = (bLon - aLon) * Math.cos(((aLat + bLat) / 2 * Math.PI) / 180)
+    return Math.hypot(dLat, dLon) * 60
+  }
+
   /**
    * Builds the shipping layer once: the lanes, the chokepoint markers, and
    * one fetch of the traffic behind them.
@@ -624,7 +656,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     if (shippingRef.current) return
     shippingRef.current = true
 
-    chokeRef.current = createChokeMarkers(CHOKEPOINTS)
+    chokeRef.current = createChokeMarkers(CHOKEPOINTS, id => setPicked({ kind: 'choke', id }))
     lanesRef.current = createLanePolylines(map)
 
     // Positioned by Google while the flat map has them, exactly as the
@@ -649,7 +681,25 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       overlay.setMap(map)
     }
 
-    vesselOverlayRef.current = createVesselOverlay(map, () => vesselsRef.current)
+    vesselOverlayRef.current = createVesselOverlay(
+      map,
+      () => vesselsRef.current,
+      () => ({
+        hours: capturedRef.current ? (Date.now() - capturedRef.current) / 3_600_000 : 0,
+        trails: trailsRef.current,
+        selected: pickedRef.current?.kind === 'ship' ? pickedRef.current.mmsi : undefined,
+      }),
+    )
+
+    // Clicking the sea picks the nearest ship, if the click was near one.
+    // Tolerance is in pixels and converted to degrees for the current zoom,
+    // so it stays the same size under the finger at every scale.
+    map.addListener('click', (e: google.maps.MapMouseEvent) => {
+      if (layerRef.current !== 'shipping' || !e.latLng) return
+      const perDeg = (256 * Math.pow(2, map.getZoom() ?? 3)) / 360
+      const found = nearestVessel(e.latLng.lat(), e.latLng.lng(), 14 / perDeg)
+      setPicked(found ? { kind: 'ship', mmsi: found.mmsi } : null)
+    })
 
     try {
       const res = await fetch('/api/chokepoints')
@@ -657,6 +707,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       const byId = new Map<string, ChokepointReading>(
         (data.readings ?? []).map((r: ChokepointReading) => [r.id, r]),
       )
+      setReadings(byId)
       for (const p of CHOKEPOINTS) {
         const m = chokeRef.current.get(p.id)
         if (m) paintChoke(m, byId.get(p.id) ?? null, p)
@@ -689,6 +740,11 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       if (shipping) await ensureShipping(map)
       if (cancelled) return
 
+      // A chokepoint picked on the shipping layer means nothing on the news
+      // one. Cleared here, after the await, rather than from an effect of its
+      // own, where it would cascade a render on every layer change.
+      if (!shipping) setPicked(null)
+
       for (const m of markersRef.current.values()) {
         m.box.style.display = shipping ? 'none' : ''
       }
@@ -720,6 +776,9 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         const data = await res.json()
         if (cancelled) return
         vesselsRef.current = data.vessels ?? []
+        trailsRef.current = extendTrails(trailsRef.current, vesselsRef.current)
+        capturedRef.current = Date.parse(data.capturedAt ?? '') || Date.now()
+        setVessels(vesselsRef.current)
         setFleet({ count: vesselsRef.current.length, configured: data.configured !== false })
         vesselOverlayRef.current?.redraw()
         globeRef.current?.refresh()
@@ -730,7 +789,13 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
 
     pull()
     const timer = window.setInterval(pull, 45_000)
-    return () => { cancelled = true; window.clearInterval(timer) }
+    // The globe redraws on its own clock; the flat map only redraws when the
+    // map itself changes, so without this the fleet would sit still between
+    // captures however carefully it was being carried forward.
+    const motion = window.setInterval(() => {
+      if (viewRef.current === 'map') vesselOverlayRef.current?.redraw()
+    }, 500)
+    return () => { cancelled = true; window.clearInterval(timer); window.clearInterval(motion) }
   }, [layer])
 
   /**
@@ -792,6 +857,26 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       />
       <div
         ref={globeStage}
+        onClick={e => {
+          if (layerRef.current !== 'shipping' || viewRef.current !== 'globe') return
+          const globe = globeRef.current
+          const stage = globeStage.current
+          if (!globe || !stage) return
+          const box = stage.getBoundingClientRect()
+          const x = e.clientX - box.left
+          const y = e.clientY - box.top
+          // Hit-tested in screen space, because on a sphere two ships a long
+          // way apart can sit a few pixels apart near the limb.
+          let best: Vessel | null = null
+          let bestD = 15
+          for (const v of vesselsRef.current) {
+            const p = globe.project(v.lat, v.lon)
+            if (!p.front) continue
+            const d = Math.hypot(p.x - x, p.y - y)
+            if (d < bestD) { bestD = d; best = v }
+          }
+          setPicked(best ? { kind: 'ship', mmsi: best.mmsi } : null)
+        }}
         className="globe-stage"
         style={{
           position: 'absolute', inset: 0,
@@ -860,6 +945,41 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           {fleet.configured
             ? `${fleet.count} ships · sampled live`
             : 'Live vessels off — set AISSTREAM_KEY'}
+        </div>
+      )}
+
+      {/* ── WHAT YOU CLICKED ── */}
+      {layer === 'shipping' && picked && (
+        <div style={{
+          position: 'absolute', zIndex: 220,
+          right: '18px', top: '64px',
+        }}>
+          {picked.kind === 'choke' ? (() => {
+            const point = CHOKEPOINTS.find(c => c.id === picked.id)
+            if (!point) return null
+            // Ships inside this chokepoint's own watch box, which is the live
+            // counterpart to PortWatch's published and week-old count.
+            const here = vessels.filter(
+              v => Math.abs(v.lat - point.lat) <= 4 && Math.abs(v.lon - point.lon) <= 4,
+            ).length
+            return (
+              <ChokepointDetail
+                point={point}
+                reading={readings.get(point.id) ?? null}
+                nearby={here}
+                onClose={() => setPicked(null)}
+              />
+            )
+          })() : (() => {
+            const vessel = vessels.find(v => v.mmsi === picked.mmsi)
+            if (!vessel) return null
+            let nearest: { name: string; miles: number } | null = null
+            for (const c of CHOKEPOINTS) {
+              const miles = milesBetween(vessel.lat, vessel.lon, c.lat, c.lon)
+              if (!nearest || miles < nearest.miles) nearest = { name: c.name, miles }
+            }
+            return <ShipDetail vessel={vessel} nearest={nearest} onClose={() => setPicked(null)} />
+          })()}
         </div>
       )}
 

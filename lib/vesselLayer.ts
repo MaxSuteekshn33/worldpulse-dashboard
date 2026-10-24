@@ -10,6 +10,77 @@
  */
 import type { Vessel } from '@/lib/vessels'
 
+/**
+ * Where a ship has got to since its last fix.
+ *
+ * Captures are seconds of listening, forty-five seconds apart, so drawn raw
+ * the fleet sits perfectly still and then teleports. Carrying each ship
+ * forward along its own reported course and speed is what AIS displays have
+ * always done between fixes, and it is honest arithmetic rather than
+ * invention: the ship told us its heading and how fast it was going.
+ *
+ * A minute of nautical miles is a minute of latitude, which is what makes
+ * this as short as it is. Longitude converges toward the poles, hence the
+ * cosine.
+ */
+export function deadReckon(v: Vessel, hours: number): { lat: number; lon: number } {
+  if (v.course < 0 || v.speed <= 0 || hours <= 0) return { lat: v.lat, lon: v.lon }
+  const nm = v.speed * hours
+  const rad = (v.course * Math.PI) / 180
+  const lat = v.lat + (nm / 60) * Math.cos(rad)
+  const cos = Math.cos((v.lat * Math.PI) / 180)
+  const lon = v.lon + (Math.abs(cos) < 1e-6 ? 0 : (nm / 60) * Math.sin(rad) / cos)
+  return { lat, lon }
+}
+
+/** Recent fixes per ship, oldest first — the path it has actually taken. */
+export type Trails = Map<number, { lat: number; lon: number }[]>
+
+/** How many captures of history a trail keeps. */
+export const TRAIL_LENGTH = 8
+
+/** Adds this capture's positions to the running trails, dropping the rest. */
+export function extendTrails(trails: Trails, vessels: Vessel[]): Trails {
+  const next: Trails = new Map()
+  for (const v of vessels) {
+    const prior = trails.get(v.mmsi) ?? []
+    const last = prior[prior.length - 1]
+    // A ship that has not moved does not need another identical point.
+    const moved = !last || Math.abs(last.lat - v.lat) > 1e-4 || Math.abs(last.lon - v.lon) > 1e-4
+    const run = moved ? [...prior, { lat: v.lat, lon: v.lon }] : prior
+    next.set(v.mmsi, run.slice(-TRAIL_LENGTH))
+  }
+  return next
+}
+
+/** Draws where the fleet has been, fading with age. */
+export function drawTrails(
+  ctx: CanvasRenderingContext2D,
+  project: (lat: number, lon: number) => { x: number; y: number } | null,
+  trails: Trails,
+  scale = 1,
+): void {
+  ctx.lineWidth = Math.max(0.8, 1.1 * scale)
+  ctx.lineCap = 'round'
+  for (const run of trails.values()) {
+    if (run.length < 2) continue
+    for (let i = 1; i < run.length; i++) {
+      const a = project(run[i - 1].lat, run[i - 1].lon)
+      const b = project(run[i].lat, run[i].lon)
+      if (!a || !b) continue
+      // Older segments are fainter, so the direction of travel reads without
+      // an arrowhead on every one.
+      ctx.globalAlpha = 0.07 + 0.3 * (i / run.length)
+      ctx.strokeStyle = HULL
+      ctx.beginPath()
+      ctx.moveTo(a.x, a.y)
+      ctx.lineTo(b.x, b.y)
+      ctx.stroke()
+    }
+  }
+  ctx.globalAlpha = 1
+}
+
 const HULL = '#CFE6F2'
 /** Moving ships read brighter than ones sitting at anchor. */
 const MOVING = 0.92
@@ -27,15 +98,30 @@ export function drawVessels(
   project: (lat: number, lon: number) => { x: number; y: number } | null,
   vessels: Vessel[],
   scale = 1,
+  hours = 0,
+  selected?: number,
 ): void {
   const size = 3.6 * scale
 
   for (const v of vessels) {
-    const at = project(v.lat, v.lon)
+    const now = deadReckon(v, hours)
+    const at = project(now.lat, now.lon)
     if (!at) continue
 
     ctx.globalAlpha = v.speed > 0.5 ? MOVING : IDLE
     ctx.fillStyle = HULL
+
+    if (v.mmsi === selected) {
+      // The one being read about, ringed so it can be found again among a
+      // few hundred identical arrowheads.
+      ctx.globalAlpha = 1
+      ctx.strokeStyle = '#4EA3C2'
+      ctx.lineWidth = 1.4 * scale
+      ctx.beginPath()
+      ctx.arc(at.x, at.y, size * 2.4, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.fillStyle = '#9FD4EA'
+    }
 
     if (v.course < 0) {
       // No course: a ship that is somewhere, pointing nowhere in particular.
@@ -73,6 +159,7 @@ export function drawVessels(
 export function createVesselOverlay(
   map: google.maps.Map,
   getVessels: () => Vessel[],
+  getState: () => { hours: number; trails: Trails; selected?: number },
 ): google.maps.OverlayView & { redraw: () => void } {
   const canvas = document.createElement('canvas')
   canvas.style.cssText = 'position:absolute;pointer-events:none'
@@ -115,7 +202,7 @@ export function createVesselOverlay(
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, width, height)
 
-    drawVessels(ctx, (lat, lon) => {
+    const place = (lat: number, lon: number) => {
       const p = proj.fromLatLngToDivPixel(new google.maps.LatLng(lat, lon))
       if (!p) return null
       const x = p.x - left
@@ -123,7 +210,11 @@ export function createVesselOverlay(
       // Off the visible canvas is not worth a draw call.
       if (x < -20 || y < -20 || x > width + 20 || y > height + 20) return null
       return { x, y }
-    }, getVessels())
+    }
+
+    const state = getState()
+    drawTrails(ctx, place, state.trails)
+    drawVessels(ctx, place, getVessels(), 1, state.hours, state.selected)
   }
 
   overlay.redraw = () => overlay.draw()
