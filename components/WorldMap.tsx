@@ -10,6 +10,8 @@ import { loadTerrain } from '@/lib/globe'
 import { CHOKEPOINTS } from '@/lib/chokepoints'
 import type { Layer } from '@/components/LayerTabs'
 import type { ChokepointReading } from '@/lib/shipping'
+import type { Vessel } from '@/lib/vessels'
+import { createVesselOverlay, drawVessels } from '@/lib/vesselLayer'
 import {
   type ChokeMarker,
   createChokeMarkers,
@@ -242,6 +244,10 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   const chokeRef = useRef<Map<string, ChokeMarker>>(new Map())
   const lanesRef = useRef<google.maps.Polyline[]>([])
   const shippingRef = useRef(false)
+  const vesselsRef = useRef<Vessel[]>([])
+  const vesselOverlayRef = useRef<(google.maps.OverlayView & { redraw: () => void }) | null>(null)
+  // Only the summary is state: it changes once a capture, not once a ship.
+  const [fleet, setFleet] = useState<{ count: number; configured: boolean } | null>(null)
   const router = useRouter()
   const isCompact = useIsCompact()
   // Stable: NavTransition memoises it on the router, so naming it as a
@@ -552,7 +558,17 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       // Read through the ref rather than captured, so switching layers does
       // not mean rebuilding the globe.
       drawOverlay: (ctx, project, radius) => {
-        if (layerRef.current === 'shipping') drawLanesOnGlobe(ctx, project, radius)
+        if (layerRef.current !== 'shipping') return
+        drawLanesOnGlobe(ctx, project, radius)
+        drawVessels(
+          ctx,
+          (lat, lon) => {
+            const p = project(lat, lon)
+            return p.front ? p : null
+          },
+          vesselsRef.current,
+          Math.max(0.55, radius / 240),
+        )
       },
     })
     return globeRef.current
@@ -633,6 +649,8 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       overlay.setMap(map)
     }
 
+    vesselOverlayRef.current = createVesselOverlay(map, () => vesselsRef.current)
+
     try {
       const res = await fetch('/api/chokepoints')
       const data = await res.json()
@@ -685,6 +703,35 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
 
     return () => { cancelled = true }
   }, [layer, tilesIn])
+
+  /**
+   * Keeps the fleet current while the shipping layer is open.
+   *
+   * Each capture is a few seconds of listening on the server, so this asks
+   * only while someone is looking at it — and stops the moment they are not.
+   */
+  useEffect(() => {
+    if (layer !== 'shipping') return
+    let cancelled = false
+
+    const pull = async () => {
+      try {
+        const res = await fetch('/api/vessels')
+        const data = await res.json()
+        if (cancelled) return
+        vesselsRef.current = data.vessels ?? []
+        setFleet({ count: vesselsRef.current.length, configured: data.configured !== false })
+        vesselOverlayRef.current?.redraw()
+        globeRef.current?.refresh()
+      } catch {
+        if (!cancelled) setFleet({ count: 0, configured: true })
+      }
+    }
+
+    pull()
+    const timer = window.setInterval(pull, 45_000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [layer])
 
   /**
    * Swaps the two views.
@@ -792,6 +839,29 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           <span>Map</span>
         </button>
       </div>
+
+      {/* ── FLEET NOTE ──
+          Says what the ships on screen are, which matters because they are a
+          few seconds of listening rather than a continuous feed — and says
+          plainly when there is no key rather than showing empty seas. */}
+      {layer === 'shipping' && fleet && (
+        <div
+          className="mono-label"
+          style={{
+            position: 'absolute', zIndex: 210,
+            top: '18px', right: '18px',
+            padding: '8px 13px', borderRadius: '10px',
+            border: '1px solid var(--border-mid)',
+            background: 'rgba(8,8,12,.84)',
+            backdropFilter: 'blur(14px)',
+            color: fleet.configured ? 'var(--text-3)' : 'var(--text-4)',
+          }}
+        >
+          {fleet.configured
+            ? `${fleet.count} ships · sampled live`
+            : 'Live vessels off — set AISSTREAM_KEY'}
+        </div>
+      )}
 
       {/* ── COLD START ──
           Tiles can take several seconds on a first load, and `backgroundColor`

@@ -18,9 +18,21 @@ CHOKEPOINTS  (lib/chokepoints.ts, /api/chokepoints)
   Daily counts are modelled from AIS, run roughly a week behind, and are
   revised, which is why every reading is shown with the date it is for.
 
-NOT INCLUDED: live vessel positions.
-  There is no free REST feed for these. AISStream is WebSocket-only and
-  allows one connection per key, which a serverless function cannot hold;
-  AISHub's free tier requires running your own AIS receiver; the rest are
-  paid. Adding live vessels needs either a short-lived socket capture from a
-  Node route or a small always-on relay.
+VESSELS  (lib/vessels.ts, /api/vessels)  — needs a key
+  AISStream — https://aisstream.io — free, GitHub sign-in, key from the
+  Account page. Set it as AISSTREAM_KEY in the environment; without it the
+  layer simply says so and the rest of the shipping view works.
+
+  There is no free REST feed for AIS, so this does not poll: it opens the
+  WebSocket, listens for about four seconds around nine watched chokepoints,
+  closes, and caches. A burst, not a stream — these are the ships that
+  transmitted during the window, not every ship present.
+
+  Constraints from AISStream's documentation that shaped it: the subscription
+  must be sent within 3 seconds of connecting; 3 subscribed connections per
+  account and 3 per originating IP; browser connections are refused outright,
+  so it can only run server-side; slow readers have messages dropped, which
+  is why the boxes are narrow rather than one box around the world.
+
+  The alternative, if sampling proves too thin: a small always-on worker
+  holding the socket permanently and writing to a store this would read.
