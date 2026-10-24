@@ -12,6 +12,19 @@ import { SOURCE_COUNT } from '@/lib/sources'
 import { useIsCompact } from '@/lib/useMediaQuery'
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false })
+// Canvas, a reprojection table and a megapixel of image data — none of it
+// wanted on the server, and none of it wanted before the map it covers.
+const GlobeIntro = dynamic(() => import('@/components/GlobeIntro'), { ssr: false })
+
+/**
+ * How long the opening runs, and how long the call to action outlasts it.
+ *
+ * The panel is held open through the opening and for a few seconds after, so
+ * the first thing anyone reads on a map they have never seen is what the map
+ * is for. Then it gets out of the way on its own.
+ */
+const INTRO_MS = 5000
+const CTA_MS = INTRO_MS + 3000
 
 function Stat({ value, label }: { value: number; label: string }) {
   return (
@@ -81,12 +94,20 @@ export default function Dashboard() {
         <WorldMap />
       </div>
 
+      {/* ── OPENING ──
+          The world turning, then unwrapping into the map. It covers the cold
+          start that was already there — tiles, then two hundred countries'
+          worth of pulse arriving in batches — rather than adding a wait of its
+          own, and it sits under the panel's scrim so the call to action over
+          it stays readable. Any click or key skips it. */}
+      <GlobeIntro />
+
       {/* ── CALL TO ACTION ──
           Left edge, collapsed by default. It was a centred hero, which covered
           the middle of the map — the part people actually came to read — and
           left nowhere to put anything else on this screen. The panel brings its
           own scrim, sized to whichever state it is in. */}
-      <CountryPanel />
+      <CountryPanel introMs={CTA_MS} />
 
       {/* ── BOTTOM STATS STRIP ──
           Google's attribution logo is pinned bottom-left of the map at

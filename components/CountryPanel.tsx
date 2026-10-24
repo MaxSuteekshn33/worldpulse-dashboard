@@ -43,19 +43,31 @@ function subscribePanel(onChange: () => void) {
   }
 }
 
-/** No stored choice means a first visit, and a first visit opens. */
-function readPanel(): boolean {
+type Choice = 'open' | 'collapsed' | 'none'
+
+/**
+ * What the viewer has decided, if anything.
+ *
+ * `none` used to mean "open", which was right when nothing else introduced
+ * the panel: a first visit had to be told what the map was for, and the only
+ * way to do that was to leave the panel open until it was dismissed. The
+ * dashboard's opening says it now, and holds the panel open while it does, so
+ * an unset choice means shown during the opening and then put away — the map
+ * is what someone came for, and a panel nobody asked for should not sit on it
+ * indefinitely.
+ */
+function readChoice(): Choice {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    return stored === null ? true : stored === 'open'
+    return stored === 'open' ? 'open' : stored === 'collapsed' ? 'collapsed' : 'none'
   } catch {
-    return true // private mode, blocked site data: treat it as a first visit
+    return 'none' // private mode, blocked site data: treat it as a first visit
   }
 }
 
-/** Collapsed on the server — the only honest answer before the store is readable. */
-function serverPanel(): boolean {
-  return false
+/** Nothing decided on the server — the only honest answer before the store is readable. */
+function serverChoice(): Choice {
+  return 'none'
 }
 
 function writePanel(next: boolean) {
@@ -65,9 +77,16 @@ function writePanel(next: boolean) {
   for (const l of listeners) l()
 }
 
-export default function CountryPanel() {
-  const open = useSyncExternalStore(subscribePanel, readPanel, serverPanel)
+/**
+ * `introMs` holds the panel open while the dashboard's opening plays, then
+ * lets it go. It is deliberately not a stored choice: the viewer did not ask
+ * for it, so it is never written back, and the moment they touch the panel it
+ * stops applying and their own choice takes over.
+ */
+export default function CountryPanel({ introMs = 0 }: { introMs?: number }) {
+  const choice = useSyncExternalStore(subscribePanel, readChoice, serverChoice)
   const [openedByUser, setOpenedByUser] = useState(false)
+  const [intro, setIntro] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const isCompact = useIsCompact()
   const navHeight = 56
@@ -79,27 +98,46 @@ export default function CountryPanel() {
     return () => cancelAnimationFrame(id)
   }, [])
 
+  // Opened just after mount rather than on the first render, so the slide is
+  // something you watch happen instead of something already finished — and so
+  // the server's answer and the client's first render still agree.
+  //
+  // On a timer rather than an animation frame: frames do not come at all in a
+  // background tab, and the panel failing to open is a worse outcome than it
+  // opening without the slide.
+  useEffect(() => {
+    if (!introMs) return
+    const show = window.setTimeout(() => setIntro(true), 80)
+    const close = window.setTimeout(() => setIntro(false), introMs)
+    return () => { window.clearTimeout(show); window.clearTimeout(close) }
+  }, [introMs])
+
   /** Remembers the choice, so the panel reopens the way the viewer left it. */
   function setPanel(next: boolean) {
     setOpenedByUser(next)
+    // Their decision ends the opening's claim on this, in either direction.
+    setIntro(false)
     writePanel(next)
   }
+
+  /** Open because they left it open, or because the dashboard just opened. */
+  const showing = intro || choice === 'open'
 
   // Escape closes it. Deliberately no click-outside: the surface behind this
   // panel is a draggable map, and ending a pan over the map would snap it shut.
   useEffect(() => {
-    if (!open) return
+    if (!showing) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPanel(false) }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open])
+  }, [showing])
 
   /** Only as dark as the state needs: a whole-flank wash would waste the map. */
   const scrim = isCompact
-    ? open
+    ? showing
       ? 'linear-gradient(to bottom, rgba(8,8,12,.94) 0%, rgba(8,8,12,.62) 42%, transparent 64%)'
       : 'linear-gradient(to bottom, rgba(8,8,12,.72) 0%, rgba(8,8,12,.2) 18%, transparent 30%)'
-    : open
+    : showing
       ? 'linear-gradient(to right, rgba(8,8,12,.95) 0%, rgba(8,8,12,.8) 24%, rgba(8,8,12,.32) 42%, transparent 58%)'
       : 'linear-gradient(to right, rgba(8,8,12,.8) 0%, rgba(8,8,12,.26) 15%, transparent 27%)'
 
@@ -134,9 +172,9 @@ export default function CountryPanel() {
             background: 'var(--panel-bg)', border: '1px solid var(--border-mid)',
             backdropFilter: 'blur(18px)', boxShadow: 'var(--shadow-lg)',
             cursor: 'pointer', textAlign: 'left',
-            transform: open ? 'translateX(-118%)' : 'translateX(0)',
-            opacity: open ? 0 : 1,
-            visibility: open ? 'hidden' : 'visible',
+            transform: showing ? 'translateX(-118%)' : 'translateX(0)',
+            opacity: showing ? 0 : 1,
+            visibility: showing ? 'hidden' : 'visible',
           }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-line)' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-mid)' }}
@@ -181,9 +219,9 @@ export default function CountryPanel() {
             // results in an absolutely positioned list that hangs below the
             // field, and any overflow setting here clips it to the card — a
             // seven-country list came back showing two.
-            transform: open ? 'translateX(0)' : 'translateX(-118%)',
-            opacity: open ? 1 : 0,
-            visibility: open ? 'visible' : 'hidden',
+            transform: showing ? 'translateX(0)' : 'translateX(-118%)',
+            opacity: showing ? 1 : 0,
+            visibility: showing ? 'visible' : 'hidden',
           }}
         >
           <div style={{
@@ -228,9 +266,9 @@ export default function CountryPanel() {
               but only focused when the viewer opened it themselves. A panel
               restored from a previous visit must not grab focus on load. */}
           <CountrySearch
-            key={open ? 'open' : 'closed'}
+            key={showing ? 'open' : 'closed'}
             size="hero"
-            autoFocus={open && openedByUser && !isCompact}
+            autoFocus={showing && openedByUser && !isCompact}
           />
 
           <div style={{
