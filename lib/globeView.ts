@@ -33,6 +33,18 @@ const FPS = 30
  *  degrees of lean. Tuned so neither axis feels faster than the other. */
 const SPIN_PER_WIDTH = 180
 const TILT_PER_HEIGHT = 110
+/**
+ * How far the pointer has to move before it counts as a drag rather than a
+ * click.
+ *
+ * This is not a nicety, it is what makes the bubbles work at all. Capturing
+ * the pointer on pointerdown retargets the click to whatever captured it, so
+ * capturing on the stage meant every click landed on the stage and no marker
+ * ever received one — the globe showed two hundred countries and not one of
+ * them could be opened. Capture is taken only once the hand has actually
+ * moved, so a press that does not move stays the marker's own click.
+ */
+const DRAG_SLOP = 4
 
 export interface GlobeMarker {
   box: HTMLElement
@@ -79,6 +91,7 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
   let last = 0
   let markersOn = true
 
+  let pressed = false
   let dragging = false
   let fromX = 0
   let fromY = 0
@@ -88,6 +101,14 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
   // Drifting on after a drag would walk the globe away from wherever they
   // just put it.
   let handled = false
+  // And it holds still while the pointer is over it at all.
+  //
+  // Without this the bubbles are a moving target: at three and a half degrees
+  // a second a country drifts most of its own width in the time it takes to
+  // aim at it, so you end up chasing it, and a click that lands late opens the
+  // country that has moved into the gap. Measured exactly that — aimed at
+  // Oman, opened India.
+  let hovering = false
 
   function placeMarkers() {
     if (!markersOn || !geometry) return
@@ -124,24 +145,35 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
     const dt = last ? (now - last) / 1000 : 0
     last = now
 
-    if (!handled && !dragging) spin += IDLE_SPIN * dt
+    if (!handled && !dragging && !hovering) spin += IDLE_SPIN * dt
     draw()
     placeMarkers()
   }
 
   function onPointerDown(e: PointerEvent) {
-    dragging = true
-    handled = true
+    // Deliberately no capture here — see DRAG_SLOP.
+    pressed = true
+    dragging = false
     fromX = e.clientX
     fromY = e.clientY
     spinAt = spin
     tiltAt = tilt
-    stage.setPointerCapture?.(e.pointerId)
-    stage.style.cursor = 'grabbing'
   }
 
   function onPointerMove(e: PointerEvent) {
-    if (!dragging) return
+    if (!pressed) return
+
+    if (!dragging) {
+      if (Math.hypot(e.clientX - fromX, e.clientY - fromY) < DRAG_SLOP) return
+      // Now it is a drag: take the pointer, stop the idle turn, and let the
+      // click that follows land on the stage rather than on whatever bubble
+      // happened to be under the finger at the end of it.
+      dragging = true
+      handled = true
+      stage.setPointerCapture?.(e.pointerId)
+      stage.style.cursor = 'grabbing'
+    }
+
     spin = spinAt - ((e.clientX - fromX) / cssW) * SPIN_PER_WIDTH
     // Dragging down leans the north pole toward the viewer, which is what the
     // hand expects: the surface under the finger follows the finger.
@@ -154,12 +186,18 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
   }
 
   function onPointerUp(e: PointerEvent) {
+    pressed = false
     if (!dragging) return
     dragging = false
     stage.releasePointerCapture?.(e.pointerId)
     stage.style.cursor = 'grab'
   }
 
+  function onPointerEnter() { hovering = true }
+  function onPointerLeave() { hovering = false }
+
+  stage.addEventListener('pointerenter', onPointerEnter)
+  stage.addEventListener('pointerleave', onPointerLeave)
   stage.addEventListener('pointerdown', onPointerDown)
   stage.addEventListener('pointermove', onPointerMove)
   stage.addEventListener('pointerup', onPointerUp)
@@ -192,6 +230,8 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
     destroy() {
       running = false
       cancelAnimationFrame(raf)
+      stage.removeEventListener('pointerenter', onPointerEnter)
+      stage.removeEventListener('pointerleave', onPointerLeave)
       stage.removeEventListener('pointerdown', onPointerDown)
       stage.removeEventListener('pointermove', onPointerMove)
       stage.removeEventListener('pointerup', onPointerUp)

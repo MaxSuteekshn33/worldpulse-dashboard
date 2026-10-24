@@ -552,46 +552,54 @@ button:active, [role="button"]:active { opacity: .85; }
 }
 
 /* ---- Globe / Map switch ----
- * Two renderings of the same world, so one control with two states rather
- * than a button that says what it will do next — which of the two you are
- * looking at should be readable without pressing anything.
+ * Two renderings of the same world, so both are always shown and the one you
+ * are in is lit — rather than one button saying what it would do next. Which
+ * of the two you are looking at should be readable without pressing anything.
  */
-.view-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 999px;
+.view-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 15px;
   border: 1px solid var(--border-mid);
-  background: rgba(8, 8, 12, .82);
-  backdrop-filter: blur(14px);
+  background: rgba(8, 8, 12, .84);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .45);
+}
+
+.view-switch button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 56px;
+  padding: 10px 0 8px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-4);
   cursor: pointer;
   font-family: Inter, system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 700;
   line-height: 1;
-  letter-spacing: .05em;
+  letter-spacing: .1em;
   text-transform: uppercase;
+  transition: color .2s ease, background .2s ease, box-shadow .2s ease;
 }
 
-.view-toggle span {
-  padding: 7px 14px;
-  border-radius: 999px;
-  color: var(--text-4);
-  transition: color .25s ease, background .25s ease, box-shadow .25s ease;
-}
+.view-switch button:hover { color: var(--text-3); }
 
-.view-toggle span.is-on {
+.view-switch button.is-on {
   color: var(--text);
   background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px var(--accent-line);
 }
 
-.view-toggle:hover span:not(.is-on) { color: var(--text-3); }
-
-.view-toggle:focus-visible {
+.view-switch button:focus-visible {
   outline: 2px solid var(--accent-bright);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
 /* Held, the globe should say so. */

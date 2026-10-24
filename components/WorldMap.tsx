@@ -1,6 +1,9 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+// `Map` is aliased: this file is full of the JavaScript one.
+import { Globe as GlobeIcon, Map as MapIcon } from 'lucide-react'
+import { useIsCompact } from '@/lib/useMediaQuery'
 import { useSoftNav } from '@/components/NavTransition'
 import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
 import { loadTerrain } from '@/lib/globe'
@@ -225,6 +228,7 @@ export default function WorldMap() {
   const viewRef = useRef<'map' | 'globe'>('map')
   const busyRef = useRef(false)
   const router = useRouter()
+  const isCompact = useIsCompact()
   // Stable: NavTransition memoises it on the router, so naming it as a
   // dependency below doesn't rebuild 200 markers.
   const navigate = useSoftNav()
@@ -577,14 +581,13 @@ export default function WorldMap() {
    * and the two projections it joined never looked like the same picture
    * mid-way however carefully they were matched.
    */
-  async function toggleView() {
-    if (busyRef.current) return
+  async function switchTo(next: 'map' | 'globe') {
+    if (busyRef.current || viewRef.current === next) return
     const canvas = globeCanvas.current
     const container = mapContainer.current
     if (!canvas || !container) return
 
     busyRef.current = true
-    const next = viewRef.current === 'map' ? 'globe' : 'map'
     const globe = await ensureGlobe()
     if (!globe) { busyRef.current = false; return }
 
@@ -636,20 +639,50 @@ export default function WorldMap() {
         }}
       />
 
-      <button
-        type="button"
-        onClick={toggleView}
-        className="view-toggle"
-        aria-label={view === 'globe' ? 'Show the flat map' : 'Show the globe'}
+      {/* ── VIEW SWITCH ──
+          Bottom left, stacked, and labelled with what each one is. It was a
+          pill in the top right, where it read as chrome and was missed —
+          which for the only control that reveals half the feature is the
+          whole problem. Lifted clear of the stats strip and of Google's
+          attribution logo, which is pinned to the very bottom left and may
+          not be moved or hidden. */}
+      <div
+        className="view-switch"
+        role="group"
+        aria-label="Map projection"
         style={{
           position: 'absolute', zIndex: 210,
-          top: '18px', right: '18px',
+          left: isCompact ? '16px' : 'calc(24px + var(--safe-left))',
+          bottom: isCompact
+            ? 'calc(104px + var(--safe-bottom))'
+            : 'calc(78px + var(--safe-bottom))',
         }}
       >
-        <span className={view === 'globe' ? 'is-on' : ''}>Globe</span>
-        <span className={view === 'map' ? 'is-on' : ''}>Map</span>
-      </button>
+        <button
+          type="button"
+          onClick={() => switchTo('globe')}
+          className={view === 'globe' ? 'is-on' : ''}
+          aria-pressed={view === 'globe'}
+        >
+          <GlobeIcon size={17} strokeWidth={1.9} aria-hidden />
+          <span>Globe</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => switchTo('map')}
+          className={view === 'map' ? 'is-on' : ''}
+          aria-pressed={view === 'map'}
+        >
+          <MapIcon size={17} strokeWidth={1.9} aria-hidden />
+          <span>Map</span>
+        </button>
+      </div>
 
+      {/* ── COLD START ──
+          Tiles can take several seconds on a first load, and `backgroundColor`
+          only stops that being a white rectangle — it still leaves the reader
+          looking at nothing. Clears on the real signal rather than a guessed
+          timeout. */}
       <div
         aria-hidden={tilesIn}
         className="dot-grid"
