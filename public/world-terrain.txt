@@ -1,13 +1,11 @@
 world-terrain.webp
 ------------------
 NASA Blue Marble Next Generation with topography and bathymetry (December
-2004), 5400x2700, downscaled to 4608x2304 and encoded as WebP at q66. At the deepest zoom
-the loading screen uses (20x, an 18-degree frame) this is indistinguishable
-from the full 5400px source, which costs 260KB more.
+2004), 5400x2700, downscaled to 4608x2304 and encoded as WebP at q66.
 
 Source: https://visibleearth.nasa.gov/images/73909
 NASA imagery is in the public domain.
 
-Equirectangular (plate carree), -180..180 longitude by -90..90 latitude, which
-is the same frame lib/outlines.ts uses — so the loading screen can place the
-image with no projection step.
+Equirectangular (plate carree), -180..180 longitude by -90..90 latitude. The
+globe view samples it directly in that frame, one source pixel per screen
+pixel of the disc, so no projection step is stored anywhere.

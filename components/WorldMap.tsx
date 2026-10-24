@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSoftNav } from '@/components/NavTransition'
 import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
-import { CENTER_LAT, CENTER_LON, HOME_ZOOM, loadTerrain, perLonAtZoom } from '@/lib/globe'
+import { loadTerrain } from '@/lib/globe'
 import { type GlobeView, createGlobeView } from '@/lib/globeView'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS, type Segment } from '@/lib/segments'
@@ -152,11 +152,14 @@ const SWEEP_MS = 850
  *  every bubble behind the turn. */
 const MARKER_TRANSITION = 'opacity .45s ease, transform .55s cubic-bezier(.2,1.25,.4,1)'
 
-/** How long the world takes to open out, or to close back up. */
-const MORPH_MS = 1250
-/** Pixels of canvas for the globe view — fewer than the opening uses, because
- *  this one redraws for as long as someone sits on it. */
-const GLOBE_PIXELS = 300_000
+/**
+ * Pixels of canvas behind the globe.
+ *
+ * Only the disc inside it is ever drawn — about a third of this — and every
+ * frame is a pass over all of those, so this is the knob that decides how
+ * sharp the globe is against how much it costs to sit on.
+ */
+const GLOBE_PIXELS = 360_000
 
 function enterDelayFor(lng: number): number {
   const west = (lng + 180) / 360
@@ -527,14 +530,6 @@ export default function WorldMap() {
       terrain,
       fit,
       markers: new Map(markersRef.current),
-      // The flat end of the morph is the live map's home view in the live
-      // map's own projection, which is what lets the two dissolve into each
-      // other instead of cutting.
-      flat: {
-        centerLat: CENTER_LAT,
-        centerLon: CENTER_LON,
-        perLon: perLonAtZoom(HOME_ZOOM) * fit,
-      },
     })
     return globeRef.current
   }
@@ -573,47 +568,40 @@ export default function WorldMap() {
     if (where === 'pane') mapRef.current?.panBy(0, 0)
   }
 
+  /**
+   * Swaps the two views.
+   *
+   * A plain cross-fade. There used to be a morph here — the globe unwrapping
+   * into the flat map and back — and it was taken out: it drew attention to
+   * the switch rather than to either of the things being switched between,
+   * and the two projections it joined never looked like the same picture
+   * mid-way however carefully they were matched.
+   */
   async function toggleView() {
     if (busyRef.current) return
-    const map = mapRef.current
     const canvas = globeCanvas.current
     const container = mapContainer.current
-    if (!map || !canvas || !container) return
+    if (!canvas || !container) return
 
     busyRef.current = true
     const next = viewRef.current === 'map' ? 'globe' : 'map'
     const globe = await ensureGlobe()
     if (!globe) { busyRef.current = false; return }
 
-    const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
-
     if (next === 'globe') {
-      // Home first. The morph starts from the map's home view, so the map has
-      // to be at it — otherwise the first frame of the morph is a jump.
-      map.panTo({ lat: CENTER_LAT, lng: CENTER_LON })
-      map.setZoom(HOME_ZOOM)
-      await wait(480)
-
-      globe.showMarkers(false)
-      await wait(260)
       viewRef.current = 'globe'
       handMarkersTo('stage')
-      canvas.style.opacity = '1'
-      await globe.morph(1, 0)      // sit exactly on what the map is showing
-      container.style.opacity = '0'
-      await globe.morph(0, MORPH_MS)
-      globe.showMarkers(true)
+      // Draws its first frame before it is faded in, so what arrives is the
+      // globe rather than an empty canvas that becomes one.
       globe.run()
+      canvas.style.opacity = '1'
+      container.style.opacity = '0'
     } else {
       globe.stop()
-      globe.showMarkers(false)
-      await wait(240)
-      await globe.morph(1, MORPH_MS)
+      canvas.style.opacity = '0'
       container.style.opacity = '1'
       viewRef.current = 'map'
       handMarkersTo('pane')
-      await wait(420)
-      canvas.style.opacity = '0'
     }
 
     setView(next)
@@ -624,7 +612,7 @@ export default function WorldMap() {
     <div style={{ width: '100%', height: '100%', background: 'var(--bg)', position: 'relative' }}>
       <div
         ref={mapContainer}
-        style={{ width: '100%', height: '100%', transition: 'opacity .55s ease' }}
+        style={{ width: '100%', height: '100%', transition: 'opacity .22s ease' }}
       />
 
       {/* The other rendering of the same world. Opacity is driven imperatively
@@ -634,7 +622,7 @@ export default function WorldMap() {
         aria-hidden
         style={{
           position: 'absolute', inset: 0, width: '100%', height: '100%',
-          pointerEvents: 'none', transition: 'opacity .4s ease',
+          pointerEvents: 'none', transition: 'opacity .22s ease',
         }}
       />
       <div

@@ -1,36 +1,38 @@
 /**
- * The globe as a view you can sit in, rather than an animation that plays once.
+ * The globe as a view you can sit in and handle.
  *
  * The dashboard has two renderings of the same thing: Google's flat map, and
  * this. They share the markers — literally the same DOM nodes, moved between
  * the map's overlay pane and this stage — so the pulse that colours a bubble
  * colours it in both, and there is no second copy of anything to keep in step.
  *
- * Switching between them is the morph in `lib/globe.ts` run on demand instead
- * of on arrival. That is the whole reason the flat end of that morph is
- * Mercator: it ends on exactly what Google is about to show, so the handover
- * is a dissolve rather than a jump.
+ * Dragging turns it and tilts it, the way a globe behaves when you put a hand
+ * on it: sideways spins it, up and down leans the pole toward you or away.
+ * Both are just numbers handed to the renderer each frame, which is the whole
+ * benefit of having dropped the lookup table the old morph needed.
  *
  * Plain module, no React. The positions this computes have to agree with the
- * reprojection to within a pixel or the bubbles sit off their own countries,
- * and that is far easier to check when it can be called directly.
+ * renderer to within a pixel or the bubbles sit off their own countries, and
+ * that is far easier to check when it can be called directly.
  */
 import {
-  type FlatView,
-  type GlobeMaps,
-  buildMaps,
-  drawFrame,
-  flatProject,
-  globeProject,
+  DEFAULT_TILT,
+  type GlobeGeometry,
+  MAX_TILT,
+  buildGlobe,
+  drawGlobe,
+  projectToScreen,
 } from '@/lib/globe'
 
-/** Degrees a second the globe turns when nobody is holding it. */
+/** Degrees a second it turns on its own, until someone takes hold of it. */
 const IDLE_SPIN = 3.5
-/** Redraws a second. The reprojection is per-pixel, and a slow turn does not
- *  need sixty of them — this halves the cost of simply sitting on the globe. */
+/** Redraws a second. A slow turn does not need sixty, and every frame is a
+ *  pass over every pixel of the disc. */
 const FPS = 30
-/** How far a drag turns it: a full window's width is half a turn. */
-const DRAG_DEGREES = 180
+/** A drag across the full width is half a turn; down the full height, 110
+ *  degrees of lean. Tuned so neither axis feels faster than the other. */
+const SPIN_PER_WIDTH = 180
+const TILT_PER_HEIGHT = 110
 
 export interface GlobeMarker {
   box: HTMLElement
@@ -44,17 +46,11 @@ export interface GlobeViewHost {
   stage: HTMLElement
   markers: Map<string, GlobeMarker>
   terrain: { data: ImageData; w: number; h: number }
-  flat: FlatView
   /** Fraction of a CSS pixel each canvas pixel covers. */
   fit: number
 }
 
 export interface GlobeView {
-  /** 0 is the globe, 1 is the flat map. */
-  readonly t: number
-  /** Runs the morph and resolves when it lands. */
-  morph(to: number, ms: number): Promise<void>
-  /** Keeps turning, keeps the bubbles on their countries. */
   run(): void
   stop(): void
   showMarkers(on: boolean): void
@@ -62,44 +58,43 @@ export interface GlobeView {
 }
 
 export function createGlobeView(host: GlobeViewHost): GlobeView {
-  const { canvas, stage, markers, terrain, flat, fit } = host
+  const { canvas, stage, markers, terrain, fit } = host
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('no 2d context')
 
-  const cssW = canvas.width / fit
-  const cssH = canvas.height / fit
-  // The reprojection works in canvas pixels and the markers in CSS pixels, so
-  // the flat view has to exist in both. Getting this wrong puts every bubble
-  // at the wrong scale the moment the map is flat.
-  const cssFlat: FlatView = { ...flat, perLon: flat.perLon / fit }
-
-  let maps: GlobeMaps | null = buildMaps(canvas.width, canvas.height, flat)
+  let geometry: GlobeGeometry | null = buildGlobe(canvas.width, canvas.height)
   let frame: ImageData | null = ctx.createImageData(canvas.width, canvas.height)
 
-  // Always entered from the flat map, so that is where it starts.
-  let t = 1
-  let spin = flat.centerLon
+  // The same circle in the units the markers are positioned in.
+  const cssCx = geometry.cx / fit
+  const cssCy = geometry.cy / fit
+  const cssRadius = geometry.radius / fit
+  const cssW = canvas.width / fit
+  const cssH = canvas.height / fit
+
+  let spin = 12
+  let tilt = DEFAULT_TILT
   let running = false
   let raf = 0
   let last = 0
-  let dragging = false
-  let dragFrom = 0
-  let spinFrom = 0
   let markersOn = true
 
+  let dragging = false
+  let fromX = 0
+  let fromY = 0
+  let spinAt = 0
+  let tiltAt = 0
+  // It turns by itself until someone puts a hand on it, and then it is theirs.
+  // Drifting on after a drag would walk the globe away from wherever they
+  // just put it.
+  let handled = false
+
   function placeMarkers() {
-    // Nothing on screen is worth positioning mid-morph: the bubbles are faded
-    // out for it, because a marker interpolated between two projections is a
-    // marker that is wrong in both.
-    if (!markersOn) return
-
+    if (!markersOn || !geometry) return
     for (const m of markers.values()) {
-      const p = t < 0.5
-        ? globeProject(m.lat, m.lng, spin, cssW, cssH)
-        : { ...flatProject(m.lat, m.lng, cssW, cssH, cssFlat), front: true }
-
+      const p = projectToScreen(m.lat, m.lng, tilt, spin, cssCx, cssCy, cssRadius)
       if (!p.front) {
-        // The far side of a sphere is not a thing you can click.
+        // The far side of a sphere is not something you can click.
         if (m.box.style.visibility !== 'hidden') {
           m.box.style.visibility = 'hidden'
           m.box.setAttribute('aria-hidden', 'true')
@@ -117,8 +112,8 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
   }
 
   function draw() {
-    if (!maps || !frame) return
-    drawFrame(frame, terrain.data, terrain.w, terrain.h, maps, t, spin)
+    if (!geometry || !frame) return
+    drawGlobe(frame, terrain.data, terrain.w, terrain.h, geometry, tilt, spin)
     ctx!.putImageData(frame, 0, 0)
   }
 
@@ -129,28 +124,40 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
     const dt = last ? (now - last) / 1000 : 0
     last = now
 
-    if (!dragging && t < 0.5) spin += IDLE_SPIN * dt
+    if (!handled && !dragging) spin += IDLE_SPIN * dt
     draw()
     placeMarkers()
   }
 
   function onPointerDown(e: PointerEvent) {
-    if (t > 0.5) return
     dragging = true
-    dragFrom = e.clientX
-    spinFrom = spin
+    handled = true
+    fromX = e.clientX
+    fromY = e.clientY
+    spinAt = spin
+    tiltAt = tilt
     stage.setPointerCapture?.(e.pointerId)
+    stage.style.cursor = 'grabbing'
   }
 
   function onPointerMove(e: PointerEvent) {
     if (!dragging) return
-    spin = spinFrom - ((e.clientX - dragFrom) / cssW) * DRAG_DEGREES
+    spin = spinAt - ((e.clientX - fromX) / cssW) * SPIN_PER_WIDTH
+    // Dragging down leans the north pole toward the viewer, which is what the
+    // hand expects: the surface under the finger follows the finger.
+    const next = tiltAt + ((e.clientY - fromY) / cssH) * TILT_PER_HEIGHT
+    tilt = Math.max(-MAX_TILT, Math.min(MAX_TILT, next))
+    // Redrawn here as well as on the clock, so a drag tracks the hand instead
+    // of lagging up to a frame behind it.
+    draw()
+    placeMarkers()
   }
 
   function onPointerUp(e: PointerEvent) {
     if (!dragging) return
     dragging = false
     stage.releasePointerCapture?.(e.pointerId)
+    stage.style.cursor = 'grab'
   }
 
   stage.addEventListener('pointerdown', onPointerDown)
@@ -159,12 +166,12 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
   stage.addEventListener('pointercancel', onPointerUp)
 
   return {
-    get t() { return t },
-
     run() {
       if (running) return
       running = true
       last = 0
+      draw()
+      placeMarkers()
       raf = requestAnimationFrame(tick)
     },
 
@@ -182,27 +189,6 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
       if (on) placeMarkers()
     },
 
-    morph(to: number, ms: number) {
-      return new Promise<void>(resolve => {
-        const from = t
-        const started = performance.now()
-        // Both ends of the turn carry on through the morph, so the globe is
-        // still moving as it opens rather than freezing to be unwrapped.
-        const step = (now: number) => {
-          const p = Math.min(1, (now - started) / ms)
-          // Ease out: most of the distance early, so it reads as settling.
-          t = from + (to - from) * (1 - Math.pow(1 - p, 3))
-          if (!dragging) spin += IDLE_SPIN / FPS
-          draw()
-          if (p < 1) { requestAnimationFrame(step); return }
-          t = to
-          draw()
-          resolve()
-        }
-        requestAnimationFrame(step)
-      })
-    },
-
     destroy() {
       running = false
       cancelAnimationFrame(raf)
@@ -210,9 +196,7 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
       stage.removeEventListener('pointermove', onPointerMove)
       stage.removeEventListener('pointerup', onPointerUp)
       stage.removeEventListener('pointercancel', onPointerUp)
-      // Several megabytes of lookup tables; the view can be left and rejoined
-      // many times in a session.
-      maps = null
+      geometry = null
       frame = null
     },
   }
