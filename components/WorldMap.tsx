@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSoftNav } from '@/components/NavTransition'
 import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
+import { CENTER_LAT, CENTER_LON, HOME_ZOOM, loadTerrain, perLonAtZoom } from '@/lib/globe'
+import { type GlobeView, createGlobeView } from '@/lib/globeView'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS, type Segment } from '@/lib/segments'
 // Type-only: erased at compile time, so the news pipeline never reaches the client bundle.
@@ -145,6 +147,17 @@ function nextInDirection(
  */
 const SWEEP_MS = 850
 
+/** What a marker's own entrance and hover animate. Restored when it goes back
+ *  to the flat map, because on the globe a transform transition would smear
+ *  every bubble behind the turn. */
+const MARKER_TRANSITION = 'opacity .45s ease, transform .55s cubic-bezier(.2,1.25,.4,1)'
+
+/** How long the world takes to open out, or to close back up. */
+const MORPH_MS = 1250
+/** Pixels of canvas for the globe view — fewer than the opening uses, because
+ *  this one redraws for as long as someone sits on it. */
+const GLOBE_PIXELS = 300_000
+
 function enterDelayFor(lng: number): number {
   const west = (lng + 180) / 360
   return Math.round(west * SWEEP_MS + Math.random() * 70)
@@ -197,9 +210,17 @@ function paint(els: MarkerEls, entry: PulseEntry | null, announce = false) {
 
 export default function WorldMap() {
   const [tilesIn, setTilesIn] = useState(false)
+  const [view, setView] = useState<'map' | 'globe'>('map')
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
   const markersRef = useRef<Map<string, MarkerEls>>(new Map())
+  // The two renderings of the same markers, and which one currently has them.
+  const globeCanvas = useRef<HTMLCanvasElement>(null)
+  const globeStage = useRef<HTMLDivElement>(null)
+  const globeRef = useRef<GlobeView | null>(null)
+  const paneRef = useRef<HTMLElement | null>(null)
+  const viewRef = useRef<'map' | 'globe'>('map')
+  const busyRef = useRef(false)
   const router = useRouter()
   // Stable: NavTransition memoises it on the router, so naming it as a
   // dependency below doesn't rebuild 200 markers.
@@ -442,9 +463,17 @@ export default function WorldMap() {
 
         const overlay = new google.maps.OverlayView()
         overlay.onAdd = function () {
-          this.getPanes()?.overlayMouseTarget.appendChild(el)
+          const pane = this.getPanes()?.overlayMouseTarget
+          if (!pane) return
+          // Remembered so the markers can be handed back after a spell on the
+          // globe. They are moved between parents, never rebuilt: the pulse
+          // has been colouring these exact nodes since the page loaded.
+          paneRef.current = pane as HTMLElement
+          pane.appendChild(el)
         }
         overlay.draw = function () {
+          // While the globe has them, their position is its business.
+          if (viewRef.current === 'globe') return
           const proj = this.getProjection()
           if (!proj) return
           const pos = proj.fromLatLngToDivPixel(new google.maps.LatLng(country.lat, country.lng))
@@ -470,9 +499,168 @@ export default function WorldMap() {
     }
   }, [router, navigate])
 
+  // Freed on unmount: the lookup tables are several megabytes, and the
+  // dashboard is left and come back to all session.
+  useEffect(() => () => {
+    globeRef.current?.destroy()
+    globeRef.current = null
+  }, [])
+
+  /** Built the first time the globe is asked for, then kept. */
+  async function ensureGlobe(): Promise<GlobeView | null> {
+    if (globeRef.current) return globeRef.current
+    const canvas = globeCanvas.current
+    const stage = globeStage.current
+    if (!canvas || !stage) return null
+
+    let terrain
+    try { terrain = await loadTerrain('/world-terrain.webp') } catch { return null }
+
+    const rect = stage.getBoundingClientRect()
+    const fit = Math.min(1, Math.sqrt(GLOBE_PIXELS / Math.max(1, rect.width * rect.height)))
+    canvas.width = Math.max(320, Math.round(rect.width * fit))
+    canvas.height = Math.max(240, Math.round(rect.height * fit))
+
+    globeRef.current = createGlobeView({
+      canvas,
+      stage,
+      terrain,
+      fit,
+      markers: new Map(markersRef.current),
+      // The flat end of the morph is the live map's home view in the live
+      // map's own projection, which is what lets the two dissolve into each
+      // other instead of cutting.
+      flat: {
+        centerLat: CENTER_LAT,
+        centerLon: CENTER_LON,
+        perLon: perLonAtZoom(HOME_ZOOM) * fit,
+      },
+    })
+    return globeRef.current
+  }
+
+  /**
+   * Moves the bubbles between the map's overlay pane and the globe's stage.
+   *
+   * The same nodes, never rebuilt — which is the point of doing it this way.
+   * Whatever the pulse has coloured them stays coloured, the tooltips and key
+   * handling come along, and there is no second set of two hundred markers to
+   * keep in step with the first.
+   */
+  function handMarkersTo(where: 'stage' | 'pane') {
+    const stage = globeStage.current
+    const pane = paneRef.current
+    for (const m of markersRef.current.values()) {
+      if (where === 'stage') {
+        if (!stage) return
+        // A transform transition would smear every bubble behind the turn.
+        m.box.style.transition = 'opacity .35s ease'
+        m.box.style.left = '0px'
+        m.box.style.top = '0px'
+        stage.appendChild(m.box)
+      } else {
+        if (!pane) return
+        m.box.style.transform = ''
+        m.box.style.visibility = 'visible'
+        m.box.removeAttribute('aria-hidden')
+        m.box.style.transition = MARKER_TRANSITION
+        m.box.style.opacity = '1'
+        pane.appendChild(m.box)
+      }
+    }
+    // Nothing about the map changed, so it has no reason to reposition the
+    // markers it has just been given back. This gives it one.
+    if (where === 'pane') mapRef.current?.panBy(0, 0)
+  }
+
+  async function toggleView() {
+    if (busyRef.current) return
+    const map = mapRef.current
+    const canvas = globeCanvas.current
+    const container = mapContainer.current
+    if (!map || !canvas || !container) return
+
+    busyRef.current = true
+    const next = viewRef.current === 'map' ? 'globe' : 'map'
+    const globe = await ensureGlobe()
+    if (!globe) { busyRef.current = false; return }
+
+    const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+    if (next === 'globe') {
+      // Home first. The morph starts from the map's home view, so the map has
+      // to be at it — otherwise the first frame of the morph is a jump.
+      map.panTo({ lat: CENTER_LAT, lng: CENTER_LON })
+      map.setZoom(HOME_ZOOM)
+      await wait(480)
+
+      globe.showMarkers(false)
+      await wait(260)
+      viewRef.current = 'globe'
+      handMarkersTo('stage')
+      canvas.style.opacity = '1'
+      await globe.morph(1, 0)      // sit exactly on what the map is showing
+      container.style.opacity = '0'
+      await globe.morph(0, MORPH_MS)
+      globe.showMarkers(true)
+      globe.run()
+    } else {
+      globe.stop()
+      globe.showMarkers(false)
+      await wait(240)
+      await globe.morph(1, MORPH_MS)
+      container.style.opacity = '1'
+      viewRef.current = 'map'
+      handMarkersTo('pane')
+      await wait(420)
+      canvas.style.opacity = '0'
+    }
+
+    setView(next)
+    busyRef.current = false
+  }
+
   return (
     <div style={{ width: '100%', height: '100%', background: 'var(--bg)', position: 'relative' }}>
-      <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
+      <div
+        ref={mapContainer}
+        style={{ width: '100%', height: '100%', transition: 'opacity .55s ease' }}
+      />
+
+      {/* The other rendering of the same world. Opacity is driven imperatively
+          so a re-render mid-transition cannot pull it out from under itself. */}
+      <canvas
+        ref={globeCanvas}
+        aria-hidden
+        style={{
+          position: 'absolute', inset: 0, width: '100%', height: '100%',
+          pointerEvents: 'none', transition: 'opacity .4s ease',
+        }}
+      />
+      <div
+        ref={globeStage}
+        className="globe-stage"
+        style={{
+          position: 'absolute', inset: 0,
+          pointerEvents: view === 'globe' ? 'auto' : 'none',
+          cursor: view === 'globe' ? 'grab' : 'default',
+          touchAction: 'none',
+        }}
+      />
+
+      <button
+        type="button"
+        onClick={toggleView}
+        className="view-toggle"
+        aria-label={view === 'globe' ? 'Show the flat map' : 'Show the globe'}
+        style={{
+          position: 'absolute', zIndex: 210,
+          top: '18px', right: '18px',
+        }}
+      >
+        <span className={view === 'globe' ? 'is-on' : ''}>Globe</span>
+        <span className={view === 'map' ? 'is-on' : ''}>Map</span>
+      </button>
 
       <div
         aria-hidden={tilesIn}

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { CENTER_LON, buildMaps, drawFrame, loadTerrain } from '@/lib/globe'
+import { CENTER_LAT, CENTER_LON, HOME_ZOOM, buildMaps, drawFrame, loadTerrain, perLonAtZoom } from '@/lib/globe'
 
 /**
  * The dashboard's opening: the world turning, then unwrapping into the map.
@@ -114,7 +114,15 @@ export default function GlobeIntro({ onDone }: { onDone?: () => void }) {
       const ctx = canvas.getContext('2d')
       if (!ctx) { finish(); return }
 
-      const maps = buildMaps(w, h)
+      // The flat end is the live map's home view, in the live map's own
+      // projection, so the dissolve at the end lands on top of it rather than
+      // beside it. `fit` is folded in because the canvas is stretched back up
+      // by CSS and the scale has to be in canvas pixels.
+      const maps = buildMaps(w, h, {
+        centerLat: CENTER_LAT,
+        centerLon: CENTER_LON,
+        perLon: perLonAtZoom(HOME_ZOOM) * fit,
+      })
       const frame = ctx.createImageData(w, h)
       if (cancelled) return
 

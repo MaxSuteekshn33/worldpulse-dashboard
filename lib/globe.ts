@@ -20,14 +20,43 @@
  * step through is an animation I cannot check.
  */
 
-/** Where the flat state lands, matching the live map's own centre. */
+/** Where the flat state lands, matching the live map's own home view. */
 export const CENTER_LAT = 25
 export const CENTER_LON = 12
+/** The live map's home zoom, which sets how many pixels a degree is worth. */
+export const HOME_ZOOM = 2.4
+
+/**
+ * How the flat end of the morph is projected.
+ *
+ * Mercator, not the equirectangular the image is stored in, because the flat
+ * end has to hand over to a Google map — and Google is Mercator. Unwrapping to
+ * equirectangular put every continent at the wrong height for the map it was
+ * dissolving into, so the handover was a visible shift rather than a dissolve.
+ * Matching the projection is what makes the two interchangeable.
+ */
+export interface FlatView {
+  centerLat: number
+  centerLon: number
+  /** Canvas pixels per degree of longitude. */
+  perLon: number
+}
+
+/** Google's own scale at a zoom level, in CSS pixels per degree of longitude. */
+export function perLonAtZoom(zoom: number): number {
+  return (256 * Math.pow(2, zoom)) / 360
+}
+
+/** Mercator's y, in radians, for a latitude in degrees. */
+function mercatorY(latDeg: number): number {
+  const phi = (Math.max(-85, Math.min(85, latDeg)) * Math.PI) / 180
+  return Math.log(Math.tan(Math.PI / 4 + phi / 2))
+}
 
 /** How much of the frame's smaller side the globe takes up. */
-const GLOBE_FILL = 0.34
+export const GLOBE_FILL = 0.34
 /** Tilt of the camera, degrees north — the globe is seen slightly from above. */
-const TILT = 20
+export const TILT = 20
 /** Direction the sun comes from, in view space. */
 const LIGHT: [number, number, number] = [-0.42, 0.44, 0.79]
 /** How far past the rim is still mapped, in globe radii. */
@@ -57,7 +86,7 @@ export interface GlobeMaps {
  * projected onto the rim, which keeps the arrays defined everywhere, but
  * `drawFrame` does not sample through it — see the note there.
  */
-export function buildMaps(w: number, h: number): GlobeMaps {
+export function buildMaps(w: number, h: number, flat: FlatView): GlobeMaps {
   const n = w * h
   const latGlobe = new Float32Array(n)
   const lonGlobe = new Float32Array(n)
@@ -73,17 +102,10 @@ export function buildMaps(w: number, h: number): GlobeMaps {
   const sinTilt = Math.sin(tilt)
   const cosTilt = Math.cos(tilt)
 
-  // The flat state covers the frame rather than fitting inside it, which is
-  // what the rest of the app does with this image.
-  const perDegree = Math.max(w / 360, h / 180)
-
-  // Centred where the frame can actually be filled, not where the live map
-  // happens to sit. Keeping 25N as the centre asks for rows above the north
-  // pole, and clamping those to the last one smears a band of Arctic ice
-  // across the top of the finished map. On most viewport shapes this lands at
-  // the equator, which is the only latitude a 180-degree-tall frame can hold.
-  const halfSpan = h / 2 / perDegree
-  const centerLat = Math.max(-90 + halfSpan, Math.min(90 - halfSpan, CENTER_LAT))
+  // Mercator y runs in radians; a degree of longitude is `perLon` pixels, so a
+  // radian of mercator y is that times 180/pi.
+  const perMercRad = (flat.perLon * 180) / Math.PI
+  const mercCentre = mercatorY(flat.centerLat)
 
   const [lx, ly, lz] = LIGHT
   const toDeg = 180 / Math.PI
@@ -92,15 +114,19 @@ export function buildMaps(w: number, h: number): GlobeMaps {
     const py = y + 0.5
     // Screen y runs down and latitude runs up.
     const up = (cy - py) / radius
-    const flatLat = centerLat - (py - cy) / perDegree
+
+    // Inverse Mercator for this row. Latitude is not linear in y here, which
+    // is the whole point — it is what the live map does with it.
+    const merc = mercCentre + (cy - py) / perMercRad
+    const flatLat = (2 * Math.atan(Math.exp(merc)) - Math.PI / 2) * toDeg
 
     for (let x = 0; x < w; x++) {
       const i = y * w + x
       const px = x + 0.5
       const nx = (px - cx) / radius
 
-      latFlat[i] = flatLat < -90 ? -90 : flatLat > 90 ? 90 : flatLat
-      lonFlat[i] = CENTER_LON + (px - cx) / perDegree
+      latFlat[i] = flatLat < -89.9 ? -89.9 : flatLat > 89.9 ? 89.9 : flatLat
+      lonFlat[i] = flat.centerLon + (px - cx) / flat.perLon
 
       let ax = nx
       let ay = up
@@ -268,4 +294,67 @@ export async function loadTerrain(url: string, width = 1024): Promise<{
   if (!ctx) throw new Error('no 2d context')
   ctx.drawImage(img, 0, 0, width, h)
   return { data: ctx.getImageData(0, 0, width, h), w: width, h }
+}
+
+
+/**
+ * Where a point on the Earth lands on screen, for anything drawn over the
+ * globe rather than into it.
+ *
+ * The forward of the inverse `buildMaps` uses, and it has to stay the forward
+ * of it: the bubbles sit on top of the sphere as DOM, so if these two ever
+ * disagree the markers drift off their own countries. `front` is false for the
+ * far side, which is the only reason the near side reads as near.
+ *
+ * Works in CSS pixels, because that is what the markers are positioned in,
+ * while `buildMaps` works in canvas pixels. The canvas is scaled uniformly, so
+ * the only difference is `radius`.
+ */
+export function globeProject(
+  latDeg: number,
+  lonDeg: number,
+  spinDeg: number,
+  w: number,
+  h: number,
+): { x: number; y: number; front: boolean } {
+  const rad = Math.PI / 180
+  const phi = latDeg * rad
+  // Longitudes are measured from whichever meridian the spin has brought round.
+  const lambda = (lonDeg - spinDeg) * rad
+  const tilt = TILT * rad
+
+  const cosPhi = Math.cos(phi)
+  const sinPhi = Math.sin(phi)
+  const cosL = Math.cos(lambda)
+  const sinL = Math.sin(lambda)
+  const cosT = Math.cos(tilt)
+  const sinT = Math.sin(tilt)
+
+  const x = cosPhi * sinL
+  const y = cosT * sinPhi - sinT * cosPhi * cosL
+  const z = sinT * sinPhi + cosT * cosPhi * cosL
+
+  const radius = Math.min(w, h) * GLOBE_FILL
+  return {
+    x: w / 2 + radius * x,
+    y: h / 2 - radius * y,
+    front: z > 0,
+  }
+}
+
+/** Where the same point lands once the map is flat, in the flat projection. */
+export function flatProject(
+  latDeg: number,
+  lonDeg: number,
+  w: number,
+  h: number,
+  flat: FlatView,
+): { x: number; y: number } {
+  const perMercRad = (flat.perLon * 180) / Math.PI
+  let delta = lonDeg - flat.centerLon
+  delta -= 360 * Math.floor((delta + 180) / 360)
+  return {
+    x: w / 2 + delta * flat.perLon,
+    y: h / 2 - (mercatorY(latDeg) - mercatorY(flat.centerLat)) * perMercRad,
+  }
 }

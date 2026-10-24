@@ -550,3 +550,49 @@ button:active, [role="button"]:active { opacity: .85; }
   .outline-fill { animation: none; fill-opacity: .21; }
   .wait-figure, .wait-caption { animation: none; opacity: 1; }
 }
+
+/* ---- Globe / Map switch ----
+ * Two renderings of the same world, so one control with two states rather
+ * than a button that says what it will do next — which of the two you are
+ * looking at should be readable without pressing anything.
+ */
+.view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--border-mid);
+  background: rgba(8, 8, 12, .82);
+  backdrop-filter: blur(14px);
+  cursor: pointer;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.view-toggle span {
+  padding: 7px 14px;
+  border-radius: 999px;
+  color: var(--text-4);
+  transition: color .25s ease, background .25s ease, box-shadow .25s ease;
+}
+
+.view-toggle span.is-on {
+  color: var(--text);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+.view-toggle:hover span:not(.is-on) { color: var(--text-3); }
+
+.view-toggle:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 3px;
+}
+
+/* Held, the globe should say so. */
+.globe-stage:active { cursor: grabbing; }
