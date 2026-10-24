@@ -1,7 +1,15 @@
 'use client'
-import { createContext, useCallback, useContext, useEffect, useRef, useState, useTransition } from 'react'
+import { Suspense, createContext, lazy, useCallback, useContext, useEffect, useRef, useState, useTransition } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { FEATURED_CODES, getCountryByCode } from '@/lib/countries'
+
+/**
+ * Lazy, because the outline geometry is ~21KB gzipped and nobody needs it
+ * until they open their first country. `lazy` rather than loading it in an
+ * effect: the data is a static import inside the component, so the chunk and
+ * the component arrive together and there is no state to set on arrival.
+ */
+const CountryOutline = lazy(() => import('./CountryOutline'))
 
 /**
  * Cross-fades navigation, but only where the destination is already built.
@@ -122,7 +130,9 @@ export default function NavTransition({ children }: { children: React.ReactNode 
   return (
     <NavContext.Provider value={navigate}>
       {children}
-      {destination && <RouteWait flag={destination.flag} name={destination.name} />}
+      {destination && (
+        <RouteWait code={destination.code} flag={destination.flag} name={destination.name} />
+      )}
     </NavContext.Provider>
   )
 }
@@ -132,9 +142,10 @@ export default function NavTransition({ children }: { children: React.ReactNode 
  *
  * Deliberately names the country rather than showing a bare spinner: the one
  * thing someone wants confirmed after clicking is that the click landed on the
- * country they meant.
+ * country they meant. The outline behind it says the same thing a second way,
+ * and gives the wait something to do that isn't a spinner.
  */
-function RouteWait({ flag, name }: { flag: string; name: string }) {
+function RouteWait({ code, flag, name }: { code: string; flag: string; name: string }) {
   return (
     <div
       role="status"
@@ -144,16 +155,29 @@ function RouteWait({ flag, name }: { flag: string; name: string }) {
         position: 'fixed', inset: 0, zIndex: 800,
         background: 'var(--bg)',
         display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', gap: '18px',
+        alignItems: 'center', justifyContent: 'center', gap: '16px',
       }}
     >
-      <span style={{ fontSize: '46px', lineHeight: 1 }} aria-hidden>{flag}</span>
-      <span className="display-lg" style={{ fontSize: 'clamp(24px, 3vw, 34px)' }}>{name}</span>
+      {/* Nothing while the chunk is in flight — on the first navigation the
+          wait is already covered by the flag and the name, and a placeholder
+          for a backdrop would be worse than no backdrop. */}
+      <Suspense fallback={null}>
+        <CountryOutline code={code} />
+      </Suspense>
+
+      {/* Flag and name on one line: under the outline there is a lot of
+          vertical stack to pay for, and the two read as one label anyway. */}
+      <span style={{
+        position: 'relative', display: 'flex', alignItems: 'center', gap: '12px',
+      }}>
+        <span style={{ fontSize: '30px', lineHeight: 1 }} aria-hidden>{flag}</span>
+        <span className="display-lg" style={{ fontSize: 'clamp(24px, 3vw, 34px)' }}>{name}</span>
+      </span>
       <span
         className="skeleton"
-        style={{ width: 'min(220px, 50vw)', height: '3px', borderRadius: '2px' }}
+        style={{ position: 'relative', width: 'min(220px, 50vw)', height: '3px', borderRadius: '2px' }}
       />
-      <span className="mono-label" style={{ color: 'var(--text-4)' }}>
+      <span className="mono-label" style={{ position: 'relative', color: 'var(--text-4)' }}>
         Gathering the latest
       </span>
     </div>

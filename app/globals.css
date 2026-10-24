@@ -331,3 +331,107 @@ button:active, [role="button"]:active { opacity: .85; }
 /* Section heading doubles as the link to that category's full page */
 .section-title h2 { transition: color .18s ease; }
 .section-title:hover h2 { color: var(--accent-bright); }
+
+/* ---- Loading screen: the country traced over a faint world map ----
+ *
+ * The trace loops, because the wait it covers has no known length — a feed
+ * that answers in 400ms and one that takes four seconds get the same screen.
+ * A bar that fills once and then sits full would be a lie about progress; a
+ * line that keeps being drawn just says "still working".
+ *
+ * `pathLength: 1` on the paths is what lets one keyframe serve all 169
+ * countries: it declares every outline to be one unit long whatever its real
+ * perimeter, so Russia and Uruguay take the same time to draw instead of
+ * Uruguay finishing forty times sooner.
+ */
+.wait-stage {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Barely there on purpose: context, not content. It sits under the flag and
+ * the country name, which have to stay the things you read first. */
+.wait-world {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: .5;
+}
+.wait-world path {
+  fill: none;
+  stroke: rgba(244, 246, 248, .07);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The figure to the world's ground. In flow, so it owns its space and the
+ * name sits under the country rather than across it. */
+.wait-figure {
+  position: relative;
+  display: block;
+  width: clamp(190px, 36vmin, 340px);
+  height: clamp(190px, 36vmin, 340px);
+  /* Optical centring: the block below is lighter than the outline above it. */
+  margin-bottom: -6px;
+}
+
+.outline-trace {
+  fill: none;
+  stroke: var(--seg-world);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  animation: outline-trace 2.4s ease-in-out infinite;
+}
+.outline-fill {
+  fill: var(--seg-world);
+  stroke: none;
+  opacity: 0;
+  animation: outline-fill 2.4s ease-in-out infinite;
+}
+
+@keyframes outline-trace {
+  0%   { stroke-dashoffset: 1; opacity: 0; }
+  10%  { opacity: 1; }
+  /* Drawn by two thirds through, then held — the hold is what keeps the loop
+   * from reading as a flicker. */
+  66%  { stroke-dashoffset: 0; }
+  88%  { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+/* The country picked out of the map behind, lighting up while the trace runs. */
+.wait-locate {
+  fill: var(--seg-world);
+  fill-opacity: .22;
+  stroke: var(--seg-world);
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  animation: outline-locate 2.4s ease-in-out infinite;
+}
+@keyframes outline-locate {
+  0%, 100% { opacity: 0; }
+  22%, 80% { opacity: .75; }
+}
+
+/* Follows the stroke home: the shape tints once its edge is closed. */
+@keyframes outline-fill {
+  0%, 58%   { opacity: 0; }
+  84%, 88%  { opacity: .12; }
+  100%      { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The outline still does its job standing still — it says which country. */
+  .outline-trace {
+    animation: none;
+    stroke-dasharray: none;
+  }
+  .outline-fill { animation: none; opacity: .12; }
+  .wait-locate { animation: none; opacity: .75; }
+}
