@@ -1,0 +1,11 @@
+world-terrain.webp
+------------------
+NASA Blue Marble Next Generation with topography and bathymetry (December
+2004), 5400x2700, downscaled to 3200x1600 and encoded as WebP at q68.
+
+Source: https://visibleearth.nasa.gov/images/73909
+NASA imagery is in the public domain.
+
+Equirectangular (plate carree), -180..180 longitude by -90..90 latitude, which
+is the same frame lib/outlines.ts uses — so the loading screen can place the
+image with no projection step.

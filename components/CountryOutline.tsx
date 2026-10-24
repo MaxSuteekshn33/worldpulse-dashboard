@@ -2,17 +2,29 @@
 import { OUTLINES, WORLD_PATH } from '@/lib/outlines'
 
 /**
- * The country being opened, traced in orange over a faint world map.
+ * The country being opened, traced in orange over the world flying in to it.
  *
  * This is the loading screen's whole visual, and it is lazy-loaded, so the
  * ~21KB of geometry never reaches someone who only reads the dashboard.
  *
  * Two layers rather than one, because they want different things. The world
- * behind is the real equirectangular extent, so it reads as a map. The country
- * in front is scaled to its own bounding box, because at world scale the point
- * of the exercise is lost — Lesotho would be four pixels. So the backdrop says
- * "a map" and the figure says "this country", and they are deliberately not at
- * the same scale.
+ * behind is the real equirectangular extent, so it reads as a map, and it
+ * pushes in toward the country while the fetch runs. The country in front is
+ * scaled to its own bounding box, because at world scale the point of the
+ * exercise is lost — Lesotho would be four pixels. So the backdrop says "a
+ * map, here" and the figure says "this country", and they are deliberately
+ * not at the same scale.
+ *
+ * The backdrop is a bundled satellite image rather than Google Earth or a
+ * second Maps instance. Both of those would make a loading screen that loads:
+ * the 3D tiles are tens of megabytes behind a session charge, and even a
+ * terrain raster map costs a map load and half a second of initialisation
+ * before its tiles start streaming — all to cover a wait that is usually
+ * shorter than that. This is 300KB, cached after the first country, and it is
+ * already in the same equirectangular frame as the outlines, so placing it
+ * takes no projection step. The vector world stays underneath it: it is in
+ * the chunk, so it is there on the first frame whether the image has arrived
+ * or not.
  *
  * The stroke width is derived from the viewBox rather than fixed, because the
  * geometry is in degrees and the zoom varies 100× between Russia and Qatar.
@@ -38,11 +50,19 @@ export default function CountryOutline({ code }: { code: string }) {
       <span className="wait-stage" aria-hidden>
         <svg
           className="wait-world"
-          viewBox="-180 -90 360 180"
+          viewBox="0 0 360 180"
           preserveAspectRatio="xMidYMid slice"
           focusable="false"
         >
-          <path d={WORLD_PATH} />
+          <image
+            className="wait-terrain"
+            href="/world-terrain.webp"
+            x={0} y={0} width={360} height={180}
+            preserveAspectRatio="none"
+          />
+          <g transform="translate(180 90)">
+            <path className="wait-borders" d={WORLD_PATH} />
+          </g>
         </svg>
       </span>
     )
@@ -69,6 +89,22 @@ export default function CountryOutline({ code }: { code: string }) {
   const asDot = outline.small || outline.wrap
   const dotX = (((x + w / 2 + 180) % 360) + 360) % 360 - 180
 
+  // How far the backdrop pushes in. Framed on the country's region rather
+  // than the country, for two reasons: a bundled world image has nowhere near
+  // the resolution to be zoomed onto Monaco, and a backdrop that ends up
+  // showing the same thing as the outline in front of it is just the outline
+  // twice. Clamped so Russia does not fly nowhere and Monaco does not fly into
+  // four pixels of smeared ocean.
+  const frame = Math.min(170, Math.max(55, Math.max(w, h) * 3.2))
+  const k = 360 / frame
+  // Keep the view inside the image, or the poles and the dateline bring in
+  // bands of empty black.
+  const clamp = (v: number, limit: number) => Math.max(-limit, Math.min(limit, v))
+  // Shifted into the backdrop's 0..360 by 0..180 frame — see the viewBox note
+  // below for why that frame is offset rather than centred on the meridian.
+  const fx = clamp(dotX, 180 - 180 / k) + 180
+  const fy = clamp(y + h / 2, 90 - 90 / k) + 90
+
   // Two layers that want different places in the layout, so they are siblings
   // rather than nested: the world is a backdrop and takes itself out of flow,
   // while the outline is the first item in the caller's column and pushes the
@@ -78,19 +114,50 @@ export default function CountryOutline({ code }: { code: string }) {
   return (
     <>
       <span className="wait-stage" aria-hidden>
+        {/*
+          * The frame runs 0..360 by 0..180 rather than the -180..180 the
+          * outlines are stored in, and the paths are shifted into it by the
+          * inner group. That is not tidiness — it is what makes the fly-in
+          * land where it should.
+          *
+          * Animating this group means a CSS transform, and a CSS transform
+          * needs a transform-origin. Chrome resolves `transform-origin` against
+          * a view-box reference box without adding the viewBox's own min-x and
+          * min-y, so on a -180..180 box `50% 50%` comes out at user-space
+          * (180, 90) rather than the (0, 0) it should be, and the measured
+          * result was the terrain parked 10,110px off screen. With the box
+          * starting at the origin the two readings agree, so this works the
+          * same whether or not a browser has that quirk.
+          */}
         <svg
           className="wait-world"
-          viewBox="-180 -90 360 180"
+          viewBox="0 0 360 180"
           preserveAspectRatio="xMidYMid slice"
           focusable="false"
         >
-          <path d={WORLD_PATH} />
-          {/* The same country again, at its real size and place, so the big
-              outline reads as a zoom rather than as a second, unrelated
-              drawing. */}
-          {asDot
-            ? <circle className="wait-locate" cx={dotX} cy={y + h / 2} r={1.3} />
-            : <path className="wait-locate" d={outline.d} />}
+          <g
+            className="wait-fly"
+            style={{ '--fly-x': `${-fx}px`, '--fly-y': `${-fy}px`, '--fly-k': k } as React.CSSProperties}
+          >
+            {/* `preserveAspectRatio="none"` is right here and nowhere else:
+                the image IS the viewBox's extent, so stretching it to those
+                bounds is what lines it up with the borders drawn over it. */}
+            <image
+              className="wait-terrain"
+              href="/world-terrain.webp"
+              x={0} y={0} width={360} height={180}
+              preserveAspectRatio="none"
+            />
+            <g transform="translate(180 90)">
+              <path className="wait-borders" d={WORLD_PATH} />
+              {/* The same country again, at its real size and place, so the
+                  big outline reads as a zoom rather than as a second,
+                  unrelated drawing. */}
+              {asDot
+                ? <circle className="wait-locate" cx={dotX} cy={y + h / 2} r={1.3} />
+                : <path className="wait-locate" d={outline.d} />}
+            </g>
+          </g>
         </svg>
       </span>
 

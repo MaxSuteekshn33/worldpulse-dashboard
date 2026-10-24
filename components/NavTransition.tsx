@@ -88,6 +88,22 @@ export default function NavTransition({ children }: { children: React.ReactNode 
     }
   }, [pathname])
 
+  // Warm the loading screen's backdrop while nothing is happening. It is
+  // 300KB, and the one moment it is needed is the one moment there is no
+  // spare bandwidth — the country's feeds are being fetched. Fetched on idle
+  // instead, it is in cache before the first click, and if it is not, the
+  // screen falls back to the vector world with nothing missing.
+  useEffect(() => {
+    const warm = () => { new Image().src = '/world-terrain.webp' }
+    const idle = window.requestIdleCallback
+    if (idle) {
+      const id = idle(warm, { timeout: 4000 })
+      return () => window.cancelIdleCallback?.(id)
+    }
+    const timer = window.setTimeout(warm, 2500)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   const navigate = useCallback((href: string) => {
     // Inside a transition so `waiting` is true for exactly as long as the new
     // route takes, with no timer to guess at.

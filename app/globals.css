@@ -352,27 +352,94 @@ button:active, [role="button"]:active { opacity: .85; }
   overflow: hidden;
 }
 
-/* Barely there on purpose: context, not content. It sits under the flag and
- * the country name, which have to stay the things you read first. */
+/* The map the screen sits on, and the thing that stops it being a black
+ * rectangle. Dim on purpose: it is context, not content, and the flag and the
+ * country name have to stay the things you read first. */
 .wait-world {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  opacity: .5;
 }
-.wait-world path {
+
+.wait-terrain {
+  opacity: 0;
+  /* Satellite colour is louder than the rest of the interface, so it is pulled
+   * back toward the palette rather than dropped in raw. */
+  filter: saturate(.72) contrast(1.06);
+  animation: terrain-in 1s ease forwards;
+}
+@keyframes terrain-in {
+  to { opacity: .36; }
+}
+
+/* Coastlines over the imagery, for as long as the picture is a map.
+ *
+ * They fade with the flight for the same reason the highlight does. Satellite
+ * imagery has no borders in it, so once the camera has arrived the only
+ * country shape on screen is the one being traced — but leave these drawn and
+ * the country's own border sits under the trace at the backdrop's scale, which
+ * is not the trace's scale, and the screen shows two of everything. Gone, the
+ * backdrop is just landscape, and that holds however large or small the
+ * country is. */
+.wait-borders {
   fill: none;
-  stroke: rgba(244, 246, 248, .07);
+  stroke: rgba(244, 246, 248, .13);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
+  animation: borders-out 2.6s ease forwards;
+}
+@keyframes borders-out {
+  0%, 42% { opacity: 1; }
+  100%    { opacity: 0; }
+}
+
+/* The push in toward the country.
+ *
+ * Runs once and holds, rather than looping with the trace: the wait has no
+ * known length, and a backdrop that flew out and in again every two seconds
+ * would be seasickness. Arriving and staying says the right thing — we got
+ * there, we are waiting.
+ *
+ * The origin is pinned to the view box's corner, which the backdrop's SVG is
+ * laid out to make unambiguous — the comment on that viewBox explains why
+ * 50% 50% could not be trusted. From there the country's coordinates are
+ * moved to the origin, scaled, and pushed back out to the middle of the
+ * frame. Both keyframes carry the same three functions so they interpolate
+ * one at a time instead of through a decomposed matrix. */
+.wait-fly {
+  transform-origin: 0 0;
+  animation: wait-fly 2.6s cubic-bezier(.22, .7, .25, 1) forwards;
+}
+@keyframes wait-fly {
+  from { transform: translate(180px, 90px) scale(1) translate(-180px, -90px); }
+  to   { transform: translate(180px, 90px) scale(var(--fly-k)) translate(var(--fly-x), var(--fly-y)); }
+}
+
+/* Darkens the edges and the ground under the text. Without it the terrain is
+ * brightest exactly where the country name sits. */
+.wait-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(125% 90% at 50% 40%, transparent 30%, rgba(8, 8, 12, .5) 76%, rgba(8, 8, 12, .88) 100%),
+    linear-gradient(to top, var(--bg) 3%, rgba(8, 8, 12, .62) 24%, transparent 58%);
 }
 
 /* The figure to the world's ground. In flow, so it owns its space and the
- * name sits under the country rather than across it. */
+ * name sits under the country rather than across it.
+ *
+ * It waits for the flight to nearly land before appearing. Drawn from the
+ * start it competes with the highlight on the map below — two versions of the
+ * country on screen while the camera is still moving — so instead the
+ * highlight hands over to it: the map says "here", and as that fades the
+ * outline takes the middle of the screen and starts tracing. */
 .wait-figure {
   position: relative;
   display: block;
+  opacity: 0;
+  animation: figure-in .75s ease 1.3s forwards;
   width: clamp(190px, 36vmin, 340px);
   height: clamp(190px, 36vmin, 340px);
   /* Optical centring: the block below is lighter than the outline above it. */
@@ -394,6 +461,10 @@ button:active, [role="button"]:active { opacity: .85; }
   animation: outline-fill 2.4s ease-in-out infinite;
 }
 
+@keyframes figure-in {
+  to { opacity: 1; }
+}
+
 @keyframes outline-trace {
   0%   { stroke-dashoffset: 1; opacity: 0; }
   10%  { opacity: 1; }
@@ -404,7 +475,16 @@ button:active, [role="button"]:active { opacity: .85; }
   100% { stroke-dashoffset: 0; opacity: 0; }
 }
 
-/* The country picked out of the map behind, lighting up while the trace runs. */
+/* The country picked out of the map behind — but only while the camera is on
+ * its way there.
+ *
+ * It used to pulse for the whole wait, which was right when the backdrop was a
+ * static world map and wrong the moment the backdrop started flying in: once
+ * the map has arrived you are looking at the same country twice, at two
+ * different sizes, a few degrees apart, and it reads as a registration bug
+ * rather than as two layers. So it does its job during the flight — here,
+ * this one — and is gone by the time anything could be compared to it,
+ * leaving terrain under one traced outline. */
 .wait-locate {
   fill: var(--seg-world);
   fill-opacity: .22;
@@ -412,11 +492,13 @@ button:active, [role="button"]:active { opacity: .85; }
   stroke-width: 1.1;
   vector-effect: non-scaling-stroke;
   opacity: 0;
-  animation: outline-locate 2.4s ease-in-out infinite;
+  animation: outline-locate 2.6s ease forwards;
 }
 @keyframes outline-locate {
-  0%, 100% { opacity: 0; }
-  22%, 80% { opacity: .75; }
+  0%   { opacity: 0; }
+  18%  { opacity: .8; }
+  58%  { opacity: .8; }
+  100% { opacity: 0; }
 }
 
 /* Follows the stroke home: the shape tints once its edge is closed. */
@@ -433,5 +515,13 @@ button:active, [role="button"]:active { opacity: .85; }
     stroke-dasharray: none;
   }
   .outline-fill { animation: none; opacity: .12; }
-  .wait-locate { animation: none; opacity: .75; }
+  .wait-locate { animation: none; opacity: 0; }
+  /* Still arrives at the country, just without the flight. */
+  .wait-fly {
+    animation: none;
+    transform: translate(180px, 90px) scale(var(--fly-k)) translate(var(--fly-x), var(--fly-y));
+  }
+  .wait-terrain { animation: none; opacity: .36; }
+  .wait-borders { animation: none; opacity: 0; }
+  .wait-figure { animation: none; opacity: 1; }
 }
