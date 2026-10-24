@@ -46,15 +46,51 @@ const WATCHED = new Set([
   'chokepoint11', // Taiwan
 ])
 
-/** Half-width of each watch box, in degrees. */
-const BOX = 1.3
+/**
+ * Half-width of each watch box, in degrees.
+ *
+ * Measured, not guessed. Yield turns out to depend far more on how wide the
+ * boxes are than on how long the capture runs — across the nine boxes, at a
+ * fixed 4.2 seconds, ±1.3 degrees returned 3 vessels and ±2.5 returned 11;
+ * widening to ±4 over 8 seconds returned 144. Narrow boxes were starving the
+ * capture, not the clock.
+ *
+ * Four degrees is about 440km, so this takes in the approaches as well as the
+ * strait itself — which is the more useful picture anyway: ships queueing to
+ * enter Hormuz are part of what is happening at Hormuz.
+ */
+const BOX = 4.0
 
 /** How long to listen. Long enough to fill a busy strait, short enough to sit
  *  inside a serverless invocation with room to spare. */
-export const CAPTURE_MS = 4200
+export const CAPTURE_MS = 7000
+
+/**
+ * How close to a chokepoint a vessel has to be to count while stopped.
+ *
+ * The boxes have to be wide to catch anything, and wide boxes catch things
+ * that are not shipping: at four degrees the Dover box reaches Paris, and the
+ * capture came back full of Seine tour boats sitting at zero knots. But a ship
+ * stopped *at* a chokepoint is the opposite of noise — a queue off Hormuz is
+ * the whole story — so stillness alone cannot be the test.
+ *
+ * So: under way anywhere in the box, or stopped close in. That keeps Channel
+ * traffic and anchored queues and drops the moored river boats.
+ */
+const ANCHORED_RANGE = 1.5
+/** Knots. Below this a vessel is not going anywhere. */
+const UNDER_WAY = 0.5
 
 /** How long a capture is served before another is taken. */
 export const VESSEL_REVALIDATE = 45
+
+/** True for a vessel worth drawing on a chokepoint map. */
+export function worthDrawing(v: Vessel, points: { lat: number; lon: number }[]): boolean {
+  if (v.speed >= UNDER_WAY) return true
+  return points.some(
+    c => Math.abs(v.lat - c.lat) <= ANCHORED_RANGE && Math.abs(v.lon - c.lon) <= ANCHORED_RANGE,
+  )
+}
 
 export interface Vessel {
   mmsi: number
@@ -124,6 +160,7 @@ export function readPositionReport(raw: RawMessage): Vessel | null {
  * deploys onto — rather than pulling in a library for one socket.
  */
 export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[]> {
+  const decoder = new TextDecoder()
   return new Promise(resolve => {
     const seen = new Map<number, Vessel>()
     let socket: WebSocket | null = null
@@ -134,7 +171,8 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
       done = true
       clearTimeout(timer)
       try { socket?.close() } catch { /* already gone */ }
-      resolve([...seen.values()])
+      const watched = CHOKEPOINTS.filter(c => WATCHED.has(c.id))
+      resolve([...seen.values()].filter(v => worthDrawing(v, watched.map(c => ({ lat: c.lat, lon: c.lon })))))
     }
 
     // The only hard deadline: whatever happens to the socket, the route
@@ -143,6 +181,14 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
 
     try {
       socket = new WebSocket(ENDPOINT)
+      // AISStream sends binary frames. Left alone, the runtime hands them
+      // over as Blobs, which cannot be read synchronously — and stringifying
+      // one gives the literal "[object Blob]", which parses as nothing. That
+      // failure is silent by construction, since an unreadable frame is
+      // caught and skipped, so the capture returned zero vessels while
+      // happily receiving hundreds of messages. Asking for ArrayBuffers
+      // instead makes them decodable where they arrive.
+      socket.binaryType = 'arraybuffer'
     } catch {
       finish()
       return
@@ -159,7 +205,9 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
 
     socket.onmessage = event => {
       try {
-        const text = typeof event.data === 'string' ? event.data : String(event.data)
+        const text = typeof event.data === 'string'
+          ? event.data
+          : decoder.decode(event.data as ArrayBuffer)
         const vessel = readPositionReport(JSON.parse(text))
         // Last position wins: a vessel reporting twice in the window has
         // moved, and the newer fix is the one to draw.

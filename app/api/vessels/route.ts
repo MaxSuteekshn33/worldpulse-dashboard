@@ -4,7 +4,7 @@ import { CAPTURE_MS, VESSEL_REVALIDATE, type Vessel, captureVessels, watchBoxes 
 /** A socket is not an edge thing, and neither is this. */
 export const runtime = 'nodejs'
 /** Room for the capture plus the handshake, and no more. */
-export const maxDuration = 15
+export const maxDuration = 20
 
 /**
  * Ships around the watched chokepoints, as of the last capture.
