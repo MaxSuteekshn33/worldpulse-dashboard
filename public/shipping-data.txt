@@ -1,0 +1,26 @@
+Shipping layer — data sources and attribution
+---------------------------------------------
+
+LANES  (lib/lanes.ts)
+  Global Shipping Lanes / Routes, v1.
+  https://doi.org/10.5281/zenodo.6361763
+  https://github.com/newzealandpaul/Shipping-Lanes
+  Licence: Creative Commons Attribution 4.0 International (CC BY 4.0).
+  Simplified here with Douglas-Peucker and rounded to two decimals; the
+  geometry is otherwise unchanged. Attribution is shown in the dashboard
+  footer whenever the shipping layer is on, as the licence requires.
+
+CHOKEPOINTS  (lib/chokepoints.ts, /api/chokepoints)
+  IMF PortWatch — https://portwatch.imf.org
+  Public ArcGIS endpoints, no API key.
+    PortWatch_chokepoints_database  — identity and position (static)
+    Daily_Chokepoints_Data          — daily vessel transits (fetched live)
+  Daily counts are modelled from AIS, run roughly a week behind, and are
+  revised, which is why every reading is shown with the date it is for.
+
+NOT INCLUDED: live vessel positions.
+  There is no free REST feed for these. AISStream is WebSocket-only and
+  allows one connection per key, which a serverless function cannot hold;
+  AISHub's free tier requires running your own AIS receiver; the rest are
+  paid. Adding live vessels needs either a short-lived socket capture from a
+  Node route or a small always-on relay.

@@ -3,8 +3,9 @@ import dynamic from 'next/dynamic'
 // Cross-fades when the destination is prerendered; a plain navigation
 // otherwise, so on-demand pages still show their skeleton at once.
 import Link from '@/components/FastLink'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import CountryPanel from '@/components/CountryPanel'
+import LayerTabs, { type Layer } from '@/components/LayerTabs'
 import CountUp from '@/components/CountUp'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
@@ -38,6 +39,9 @@ function Stat({ value, label }: { value: number; label: string }) {
 
 export default function Dashboard() {
   const isCompact = useIsCompact()
+  // Which question the map is answering. Lives here because both the tabs and
+  // the map need it, and switching must not remount either.
+  const [layer, setLayer] = useState<Layer>('news')
   const navHeight = 56
 
   useEffect(() => {
@@ -80,6 +84,10 @@ export default function Dashboard() {
             </span>
           )}
         </div>
+
+        <div style={{ marginLeft: isCompact ? '12px' : '26px' }}>
+          <LayerTabs value={layer} onChange={setLayer} compact={isCompact} />
+        </div>
       </header>
 
       {/* ── MAP ── */}
@@ -87,7 +95,7 @@ export default function Dashboard() {
         position: 'absolute', inset: 0,
         paddingTop: `calc(${navHeight}px + var(--safe-top))`,
       }}>
-        <WorldMap />
+        <WorldMap layer={layer} />
       </div>
 
 
@@ -114,9 +122,23 @@ export default function Dashboard() {
         gap: isCompact ? '16px' : '28px',
         flexWrap: 'wrap',
       }}>
-        <Stat value={COUNTRIES.length} label="Countries" />
-        <Stat value={SOURCE_COUNT} label="Newsrooms" />
-        <Stat value={SEGMENTS.length} label="Categories" />
+        {layer === 'shipping' ? (
+          // Required by the lanes dataset's licence, and worth showing for the
+          // traffic figures regardless — a count of ships through a strait
+          // means little without knowing who counted them.
+          <span className="mono-label" style={{ color: 'var(--text-4)', lineHeight: 1.5 }}>
+            Lanes: Global Shipping Lanes v1 (CC BY 4.0)
+            {!isCompact && ' · '}
+            {isCompact && <br />}
+            Traffic: IMF PortWatch
+          </span>
+        ) : (
+          <>
+            <Stat value={COUNTRIES.length} label="Countries" />
+            <Stat value={SOURCE_COUNT} label="Newsrooms" />
+            <Stat value={SEGMENTS.length} label="Categories" />
+          </>
+        )}
 
         {/* Legend */}
         {!isCompact && (

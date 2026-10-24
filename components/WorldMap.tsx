@@ -7,6 +7,16 @@ import { useIsCompact } from '@/lib/useMediaQuery'
 import { useSoftNav } from '@/components/NavTransition'
 import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
 import { loadTerrain } from '@/lib/globe'
+import { CHOKEPOINTS } from '@/lib/chokepoints'
+import type { Layer } from '@/components/LayerTabs'
+import type { ChokepointReading } from '@/lib/shipping'
+import {
+  type ChokeMarker,
+  createChokeMarkers,
+  createLanePolylines,
+  drawLanesOnGlobe,
+  paintChoke,
+} from '@/lib/shippingLayer'
 import { type GlobeView, createGlobeView } from '@/lib/globeView'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS, type Segment } from '@/lib/segments'
@@ -214,7 +224,7 @@ function paint(els: MarkerEls, entry: PulseEntry | null, announce = false) {
     : `${els.name} · quiet right now`
 }
 
-export default function WorldMap() {
+export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   const [tilesIn, setTilesIn] = useState(false)
   const [view, setView] = useState<'map' | 'globe'>('map')
   const mapContainer = useRef<HTMLDivElement>(null)
@@ -227,6 +237,11 @@ export default function WorldMap() {
   const paneRef = useRef<HTMLElement | null>(null)
   const viewRef = useRef<'map' | 'globe'>('map')
   const busyRef = useRef(false)
+  // The shipping layer, built the first time it is asked for and kept after.
+  const layerRef = useRef<Layer>(layer)
+  const chokeRef = useRef<Map<string, ChokeMarker>>(new Map())
+  const lanesRef = useRef<google.maps.Polyline[]>([])
+  const shippingRef = useRef(false)
   const router = useRouter()
   const isCompact = useIsCompact()
   // Stable: NavTransition memoises it on the router, so naming it as a
@@ -534,6 +549,11 @@ export default function WorldMap() {
       terrain,
       fit,
       markers: new Map(markersRef.current),
+      // Read through the ref rather than captured, so switching layers does
+      // not mean rebuilding the globe.
+      drawOverlay: (ctx, project, radius) => {
+        if (layerRef.current === 'shipping') drawLanesOnGlobe(ctx, project, radius)
+      },
     })
     return globeRef.current
   }
@@ -549,7 +569,11 @@ export default function WorldMap() {
   function handMarkersTo(where: 'stage' | 'pane') {
     const stage = globeStage.current
     const pane = paneRef.current
-    for (const m of markersRef.current.values()) {
+    // Both sets travel together, whichever layer is showing: the one that is
+    // hidden is hidden by `display`, and leaving it behind in the other view's
+    // container would strand it there the moment the layer changed.
+    const all = [...markersRef.current.values(), ...chokeRef.current.values()]
+    for (const m of all) {
       if (where === 'stage') {
         if (!stage) return
         // A transform transition would smear every bubble behind the turn.
@@ -573,6 +597,96 @@ export default function WorldMap() {
   }
 
   /**
+   * Builds the shipping layer once: the lanes, the chokepoint markers, and
+   * one fetch of the traffic behind them.
+   *
+   * Deferred until the layer is first opened, because most visits never leave
+   * the news and none of this is free — 162 polylines, 28 overlays and a
+   * round trip.
+   */
+  async function ensureShipping(map: google.maps.Map) {
+    if (shippingRef.current) return
+    shippingRef.current = true
+
+    chokeRef.current = createChokeMarkers(CHOKEPOINTS)
+    lanesRef.current = createLanePolylines(map)
+
+    // Positioned by Google while the flat map has them, exactly as the
+    // country bubbles are.
+    for (const p of CHOKEPOINTS) {
+      const m = chokeRef.current.get(p.id)
+      if (!m) continue
+      const overlay = new google.maps.OverlayView()
+      overlay.onAdd = function () {
+        this.getPanes()?.overlayMouseTarget.appendChild(m.box)
+      }
+      overlay.draw = function () {
+        if (viewRef.current === 'globe') return
+        const proj = this.getProjection()
+        if (!proj) return
+        const at = proj.fromLatLngToDivPixel(new google.maps.LatLng(p.lat, p.lon))
+        if (!at) return
+        m.box.style.left = `${at.x - 12}px`
+        m.box.style.top = `${at.y - 12}px`
+      }
+      overlay.onRemove = function () { m.box.parentNode?.removeChild(m.box) }
+      overlay.setMap(map)
+    }
+
+    try {
+      const res = await fetch('/api/chokepoints')
+      const data = await res.json()
+      const byId = new Map<string, ChokepointReading>(
+        (data.readings ?? []).map((r: ChokepointReading) => [r.id, r]),
+      )
+      for (const p of CHOKEPOINTS) {
+        const m = chokeRef.current.get(p.id)
+        if (m) paintChoke(m, byId.get(p.id) ?? null, p)
+      }
+    } catch {
+      // The lanes and the chokepoints are still worth showing without the
+      // counts; the markers keep their "figures loading" tooltip.
+    }
+  }
+
+  /** Whichever markers the current layer puts on the globe. */
+  function activeMarkers() {
+    return layerRef.current === 'shipping'
+      ? new Map([...chokeRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
+      : new Map([...markersRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
+  }
+
+  // Applies the layer to whichever view is showing. DOM only — nothing here
+  // is React state, because two hundred bubbles and a hundred and sixty
+  // polylines are not worth a render each.
+  useEffect(() => {
+    layerRef.current = layer
+    const map = mapRef.current
+    if (!map) return
+
+    let cancelled = false
+    const shipping = layer === 'shipping'
+
+    ;(async () => {
+      if (shipping) await ensureShipping(map)
+      if (cancelled) return
+
+      for (const m of markersRef.current.values()) {
+        m.box.style.display = shipping ? 'none' : ''
+      }
+      for (const m of chokeRef.current.values()) {
+        m.box.style.display = shipping ? '' : 'none'
+      }
+      for (const line of lanesRef.current) line.setMap(shipping ? map : null)
+
+      globeRef.current?.setMarkers(activeMarkers())
+      globeRef.current?.refresh()
+    })()
+
+    return () => { cancelled = true }
+  }, [layer, tilesIn])
+
+  /**
    * Swaps the two views.
    *
    * A plain cross-fade. There used to be a morph here — the globe unwrapping
@@ -594,6 +708,7 @@ export default function WorldMap() {
     if (next === 'globe') {
       viewRef.current = 'globe'
       handMarkersTo('stage')
+      globe.setMarkers(activeMarkers())
       // Draws its first frame before it is faded in, so what arrives is the
       // globe rather than an empty canvas that becomes one.
       globe.run()

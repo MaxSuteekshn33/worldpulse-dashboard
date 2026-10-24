@@ -604,3 +604,50 @@ button:active, [role="button"]:active { opacity: .85; }
 
 /* Held, the globe should say so. */
 .globe-stage:active { cursor: grabbing; }
+
+/* ---- Layer tabs ----
+ * One map, read several ways. Sits in the header rather than over the map,
+ * because it changes what the whole screen is about and the map's own
+ * controls are for changing how you look at it.
+ */
+.layer-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, .03);
+}
+
+.layer-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  transition: color .2s ease, background .2s ease;
+}
+
+.layer-tabs button:hover { color: var(--text-3); }
+
+.layer-tabs button.is-on {
+  color: var(--text);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+.layer-tabs button:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}

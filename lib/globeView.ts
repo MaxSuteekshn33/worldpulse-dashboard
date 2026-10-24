@@ -52,6 +52,13 @@ export interface GlobeMarker {
   lng: number
 }
 
+/** Draws on top of the sphere, in canvas pixels, after it has been painted. */
+export type GlobeOverlay = (
+  ctx: CanvasRenderingContext2D,
+  project: (lat: number, lon: number) => { x: number; y: number; front: boolean },
+  radius: number,
+) => void
+
 export interface GlobeViewHost {
   canvas: HTMLCanvasElement
   /** Where the markers live while this view owns them. */
@@ -60,9 +67,22 @@ export interface GlobeViewHost {
   terrain: { data: ImageData; w: number; h: number }
   /** Fraction of a CSS pixel each canvas pixel covers. */
   fit: number
+  /**
+   * Anything that belongs on the globe but is not the globe — shipping lanes,
+   * and whatever the dashboard grows next.
+   *
+   * Drawn into the same canvas rather than layered over it as SVG, because it
+   * has to move with the sphere: a separate element would need every one of
+   * its points rewritten each frame, and would still be a frame behind.
+   */
+  drawOverlay?: GlobeOverlay
 }
 
 export interface GlobeView {
+  /** Swaps which set of markers rides on the sphere, when the layer changes. */
+  setMarkers(next: Map<string, GlobeMarker>): void
+  /** Redraws once without waiting for the clock — after a layer change. */
+  refresh(): void
   run(): void
   stop(): void
   showMarkers(on: boolean): void
@@ -70,7 +90,8 @@ export interface GlobeView {
 }
 
 export function createGlobeView(host: GlobeViewHost): GlobeView {
-  const { canvas, stage, markers, terrain, fit } = host
+  const { canvas, stage, terrain, fit } = host
+  let markers = host.markers
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('no 2d context')
 
@@ -136,6 +157,15 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
     if (!geometry || !frame) return
     drawGlobe(frame, terrain.data, terrain.w, terrain.h, geometry, tilt, spin)
     ctx!.putImageData(frame, 0, 0)
+
+    if (host.drawOverlay) {
+      const g = geometry
+      host.drawOverlay(
+        ctx!,
+        (lat, lon) => projectToScreen(lat, lon, tilt, spin, g.cx, g.cy, g.radius),
+        g.radius,
+      )
+    }
   }
 
   function tick(now: number) {
@@ -204,6 +234,18 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
   stage.addEventListener('pointercancel', onPointerUp)
 
   return {
+    setMarkers(next) {
+      // The set leaving the sphere keeps whatever it was last given; it is
+      // hidden by the caller, not unpositioned here.
+      markers = next
+      placeMarkers()
+    },
+
+    refresh() {
+      draw()
+      placeMarkers()
+    },
+
     run() {
       if (running) return
       running = true
