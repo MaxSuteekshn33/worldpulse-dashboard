@@ -411,6 +411,28 @@ deployment:
   `hot` tier stays reserved for wire readings; a search reading renders
   `active` — a solid dot and a ring, no animation.
 
+## Why clicking a country used to lag
+
+Two separate costs, measured rather than guessed.
+
+**The slowest feed sets the page's speed.** Every feed is fetched in parallel,
+so a country page waits for whichever one answers last — which makes the
+per-feed timeout the page's worst case, not one feed's budget. It was 8
+seconds. Timing the feeds individually: most answer in under 2s, Euronews took
+3.9s, and the Guardian hung past 20. `FEED_TIMEOUT_MS` is now **3s**; losing a
+straggler costs one source out of fifteen and the section fills from the rest,
+while waiting for it costs every reader.
+
+**The click itself.** Only five countries are prerendered, so the rest render
+on demand — measured live at 1.8–2.8s cold against 0.34s for a prerendered
+one. Hovering a map bubble, or highlighting a country in the search, now calls
+`router.prefetch` for that country (once per country — prefetch caches, and
+re-asking on every mouseenter is noise). The work happens while the reader is
+still aiming, so by the time they click there is nothing left to wait for.
+
+Cold country pages measured 1.1–1.5s after the timeout change, down from
+1.8–2.8s.
+
 ## Why only five countries are prerendered
 
 `generateStaticParams` returns `FEATURED_CODES`, not all 200. Building every

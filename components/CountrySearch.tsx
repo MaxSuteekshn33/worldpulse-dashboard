@@ -37,6 +37,17 @@ export default function CountrySearch({
   // Keep the highlighted row in range as the result list shrinks.
   const activeIndex = active < results.length ? active : 0
 
+  // Warm whichever country is highlighted, so picking it lands on a page the
+  // server has already started. Most countries render on demand and that is a
+  // second or two cold; this spends it while the reader is still choosing.
+  // Once per country — prefetch caches, but re-asking on every hover is noise.
+  const warmed = useRef(new Set<string>())
+  function warm(code: string) {
+    if (warmed.current.has(code)) return
+    warmed.current.add(code)
+    router.prefetch(`/country/${code}`)
+  }
+
   function pick(code: string) {
     setOpen(false)
     setQuery('')
@@ -45,8 +56,17 @@ export default function CountrySearch({
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (!open || results.length === 0) return
-    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((activeIndex + 1) % results.length) }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((activeIndex - 1 + results.length) % results.length) }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const next = (activeIndex + 1) % results.length
+      setActive(next)
+      warm(results[next].code)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const next = (activeIndex - 1 + results.length) % results.length
+      setActive(next)
+      warm(results[next].code)
+    }
     else if (e.key === 'Enter') { e.preventDefault(); pick(results[activeIndex].code) }
     else if (e.key === 'Escape') { setOpen(false) }
   }
@@ -113,7 +133,7 @@ export default function CountrySearch({
               role="option"
               aria-selected={i === activeIndex}
               onMouseDown={() => pick(c.code)}
-              onMouseEnter={() => setActive(i)}
+              onMouseEnter={() => { setActive(i); warm(c.code) }}
               style={{
                 display: 'flex', alignItems: 'center', gap: '13px',
                 padding: '13px 17px', cursor: 'pointer',

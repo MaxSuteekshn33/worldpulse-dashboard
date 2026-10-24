@@ -375,9 +375,24 @@ export default function WorldMap() {
         paint(els, null)
         markersRef.current.set(country.code, els)
 
-        const open = () => navigate(`/country/${country.code}`)
+        const href = `/country/${country.code}`
+        const open = () => navigate(href)
+
+        // Start the country page the moment a pointer settles on the bubble.
+        // Only five countries are prerendered; the rest render on demand, and
+        // measured cold that is a second or two. Warming it on hover moves
+        // that wait into the time someone spends aiming, so the click itself
+        // has nothing left to wait for. Once per marker — prefetch is cached,
+        // but re-asking on every mouseenter is noise.
+        let warmed = false
+        const warm = () => {
+          if (warmed) return
+          warmed = true
+          router.prefetch(href)
+        }
 
         el.addEventListener('mouseenter', () => {
+          warm()
           tip.style.display = 'block'
           dot.style.transform = 'translate(-50%,-50%) scale(1.5)'
         })
@@ -390,6 +405,7 @@ export default function WorldMap() {
         // Focus gets the same treatment as hover, so a keyboard user can see
         // and read where they are instead of inferring it from a ring.
         el.addEventListener('focus', () => {
+          warm()
           tip.style.display = 'block'
           dot.style.transform = 'translate(-50%,-50%) scale(1.5)'
         })

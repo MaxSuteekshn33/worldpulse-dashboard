@@ -6,6 +6,9 @@ import { getCountryByCode } from './countries'
 /** How long a cached feed response stays warm (seconds). 20 minutes. */
 export const REVALIDATE_SECONDS = 1200
 
+/** How long any one feed gets before the page gives up on it. */
+const FEED_TIMEOUT_MS = 3000
+
 /** Articles older than this are dropped so the deck never shows stale news. */
 const MAX_AGE_DAYS = 7
 
@@ -672,7 +675,13 @@ async function fetchFeed(feed: Feed, segment: Segment): Promise<Article[]> {
     const res = await fetch(feed.url, {
       next: { revalidate: REVALIDATE_SECONDS },
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WorldPulse/1.0)' },
-      signal: AbortSignal.timeout(8000),
+      // Every feed is fetched in parallel, so a page waits for the SLOWEST
+      // one — this number is the page's worst case, not one feed's budget.
+      // At 8s a single hanging newsroom held a whole country page: measured,
+      // most feeds answer in under 2s, Euronews took 3.9s and the Guardian
+      // hung past 20. Dropping a straggler costs one source out of fifteen
+      // and the section fills from the rest; waiting for it costs everyone.
+      signal: AbortSignal.timeout(FEED_TIMEOUT_MS),
     })
     if (!res.ok) return []
 
