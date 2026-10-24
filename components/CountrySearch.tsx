@@ -3,6 +3,7 @@ import { useState, useRef, useMemo, useId } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, ArrowRight } from 'lucide-react'
 import { COUNTRIES } from '@/lib/countries'
+import { useSoftNav } from './NavTransition'
 
 interface Props {
   /** Visually larger treatment for the map hero. */
@@ -17,6 +18,7 @@ export default function CountrySearch({
   autoFocus = false,
 }: Props) {
   const router = useRouter()
+  const navigate = useSoftNav()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
@@ -51,7 +53,7 @@ export default function CountrySearch({
   function pick(code: string) {
     setOpen(false)
     setQuery('')
-    router.push(`/country/${code}`)
+    navigate(`/country/${code}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent) {

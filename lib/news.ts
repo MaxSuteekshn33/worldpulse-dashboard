@@ -131,18 +131,6 @@ export const RSS_FEEDS: Record<Segment, Feed[]> = {
 export { matchesCountry }
 
 /**
- * Extra query terms that steer a Google News search toward each segment.
- * Empty for headlines — the country name alone is the broadest, freshest net.
- */
-const SEGMENT_QUERY: Record<Segment, string> = {
-  headline: '',
-  politics: 'politics OR government OR election',
-  world:    'foreign policy OR diplomacy OR international',
-  economy:  'economy OR inflation OR trade OR GDP',
-  finance:  'markets OR stocks OR banking OR currency',
-}
-
-/**
  * Per-country Google News search feed.
  *
  * The ten curated newsrooms skew UK/US/India/Australia, so most of the smaller
@@ -153,10 +141,20 @@ const SEGMENT_QUERY: Record<Segment, string> = {
  * publishes English editions for some countries, and the rest silently fall
  * back to the US edition, which would have injected US stories into, say,
  * Lebanon's page.
+ *
+ * **One query per country, not one per section.** Each section used to add its
+ * own terms ("politics OR government OR election" and so on), which meant a
+ * single country page made five separate requests to Google. Google rate-limits
+ * this endpoint, and five requests per page is where a low-coverage country
+ * gets hurt: those pages lean on the search almost entirely, so a throttled
+ * request both slows the render and thins the page — and ISR then caches that
+ * thin page for twenty minutes. The bare country name is the broadest net
+ * anyway, every section requests the identical URL so Next's fetch cache
+ * collapses them into one request, and the topic gate already sorts what comes
+ * back into the right sections.
  */
-export function googleNewsFeed(countryName: string, segment: Segment): Feed {
-  const extra = SEGMENT_QUERY[segment]
-  const query = `"${countryName}"${extra ? ' ' + extra : ''} when:${MAX_AGE_DAYS}d`
+export function googleNewsFeed(countryName: string): Feed {
+  const query = `"${countryName}" when:${MAX_AGE_DAYS}d`
   const url =
     'https://news.google.com/rss/search?q=' +
     encodeURIComponent(query) +
@@ -747,7 +745,7 @@ export async function getSegmentNews(
   // Curated newsrooms give depth for the big markets; the Google News search
   // gives any country a floor of coverage. Both go through the same filter.
   const feeds: Feed[] = country
-    ? [...curated, googleNewsFeed(country.name, segment)]
+    ? [...curated, googleNewsFeed(country.name)]
     : curated
 
   const all = (await Promise.all(feeds.map(f => fetchFeed(f, segment)))).flat()
@@ -928,7 +926,7 @@ export async function getSearchPulse(
       const country = getCountryByCode(code.toUpperCase())
       if (!country) return [code, null]
 
-      const items = await fetchFeed(googleNewsFeed(country.name, 'headline'), 'headline')
+      const items = await fetchFeed(googleNewsFeed(country.name), 'headline')
 
       const matched = items.filter(
         a =>

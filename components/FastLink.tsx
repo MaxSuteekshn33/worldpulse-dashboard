@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import type { ComponentProps } from 'react'
-import { isInstantRoute, useSoftNav } from './NavTransition'
+import { useSoftNav } from './NavTransition'
 
 /**
  * A `next/link` that cross-fades when the destination is prerendered.
@@ -24,7 +24,10 @@ export default function FastLink({ href, onClick, children, ...rest }: Component
         onClick?.(e)
         if (e.defaultPrevented) return
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
-        if (!target || !isInstantRoute(target)) return
+        // Every in-app link goes through the helper, not just the instant
+        // ones: it decides whether to cross-fade, and it is what knows a
+        // navigation is in flight so the wait screen can appear.
+        if (!target || !target.startsWith('/')) return
         e.preventDefault()
         navigate(target)
       }}

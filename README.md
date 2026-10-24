@@ -411,6 +411,42 @@ deployment:
   `hot` tier stays reserved for wire readings; a search reading renders
   `active` — a solid dot and a ring, no animation.
 
+## Clicking a country answers immediately
+
+Next keeps the **old** page on screen until the new route is ready, and its
+`loading.tsx` boundary does not show on these navigations — measured on a
+search-to-country jump, the URL and the content both appeared at 636ms with no
+skeleton in between. On a country whose feeds are slow that is several seconds
+of a page that looks like it ignored the click, which is what "lag" actually
+was here.
+
+So the pending state is owned rather than inferred. `NavTransition` runs every
+in-app navigation inside a `useTransition`, and while it is pending shows a
+full-screen wait naming the destination — flag, country, "Gathering the
+latest". It names the country deliberately: the thing a reader wants confirmed
+after clicking is that the click landed where they meant.
+
+Every route into a country goes through that helper — `FastLink` for links,
+`useSoftNav` for the search's imperative push, the map markers already did — so
+the wait can never be bypassed.
+
+Measured: wait screen up at the keypress, gone at 953ms exactly when the cards
+render.
+
+## One Google News search per country, not five
+
+Each section used to add its own query terms, so a single country page made
+**five** separate requests to Google News. Google rate-limits that endpoint,
+and low-coverage countries are where it hurts: those pages lean on the search
+almost entirely, so a throttled request both slows the render and thins the
+page — and ISR then caches the thin result for twenty minutes. Algeria was
+served as a 4-story page for exactly that reason while its API returned 60.
+
+The bare country name is the broadest net anyway, every section now requests
+the identical URL so Next's fetch cache collapses them into one, and the topic
+gate already sorts what comes back. Cold low-coverage pages went from ~2–4s to
+**0.8–1.4s** with content intact (Algeria 49 stories, DR Congo 51).
+
 ## Why clicking a country used to lag
 
 Two separate costs, measured rather than guessed.
