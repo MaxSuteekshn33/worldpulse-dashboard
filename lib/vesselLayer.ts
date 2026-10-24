@@ -62,6 +62,7 @@ export function drawTrails(
 ): void {
   ctx.lineWidth = Math.max(0.8, 1.1 * scale)
   ctx.lineCap = 'round'
+  ctx.shadowBlur = 0
   for (const run of trails.values()) {
     if (run.length < 2) continue
     for (let i = 1; i < run.length; i++) {
@@ -83,8 +84,13 @@ export function drawTrails(
 
 const HULL = '#CFE6F2'
 /** Moving ships read brighter than ones sitting at anchor. */
-const MOVING = 0.92
-const IDLE = 0.4
+const MOVING = 0.95
+const IDLE = 0.45
+/** Base hull length in pixels, before the view's own scale. */
+const HULL_SIZE = 5.4
+/** How far the hull's light carries. Scaled with the hull so the glow does
+ *  not swamp it on the globe, where everything is drawn smaller. */
+const GLOW = 7
 
 /**
  * Draws one fleet, given something that can place a latitude and longitude.
@@ -101,7 +107,7 @@ export function drawVessels(
   hours = 0,
   selected?: number,
 ): void {
-  const size = 3.6 * scale
+  const size = HULL_SIZE * scale
 
   for (const v of vessels) {
     const now = deadReckon(v, hours)
@@ -110,6 +116,11 @@ export function drawVessels(
 
     ctx.globalAlpha = v.speed > 0.5 ? MOVING : IDLE
     ctx.fillStyle = HULL
+    // Lit rather than merely pale: against a dark map at this size a flat
+    // triangle reads as a speck of dust, and the glow is what makes a ship
+    // look like a thing with a light on it.
+    ctx.shadowColor = HULL
+    ctx.shadowBlur = GLOW * scale
 
     if (v.mmsi === selected) {
       // The one being read about, ringed so it can be found again among a
@@ -117,17 +128,20 @@ export function drawVessels(
       ctx.globalAlpha = 1
       ctx.strokeStyle = '#4EA3C2'
       ctx.lineWidth = 1.4 * scale
+      ctx.shadowColor = '#4EA3C2'
       ctx.beginPath()
-      ctx.arc(at.x, at.y, size * 2.4, 0, Math.PI * 2)
+      ctx.arc(at.x, at.y, size * 2, 0, Math.PI * 2)
       ctx.stroke()
       ctx.fillStyle = '#9FD4EA'
+      ctx.shadowColor = '#9FD4EA'
     }
 
     if (v.course < 0) {
       // No course: a ship that is somewhere, pointing nowhere in particular.
       ctx.beginPath()
-      ctx.arc(at.x, at.y, size * 0.5, 0, Math.PI * 2)
+      ctx.arc(at.x, at.y, size * 0.45, 0, Math.PI * 2)
       ctx.fill()
+      ctx.shadowBlur = 0
       continue
     }
 
@@ -147,6 +161,8 @@ export function drawVessels(
     ctx.restore()
   }
 
+  // Left on, every later stroke on this canvas would be glowing too.
+  ctx.shadowBlur = 0
   ctx.globalAlpha = 1
 }
 

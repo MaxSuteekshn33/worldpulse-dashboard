@@ -4,6 +4,7 @@ import type { Chokepoint } from '@/lib/chokepoints'
 import type { ChokepointReading } from '@/lib/shipping'
 import { changeRatio } from '@/lib/shippingLayer'
 import type { Vessel } from '@/lib/vessels'
+import { type LaneRoute, describeEnd } from '@/lib/laneInfo'
 
 /**
  * What you get for clicking something at sea.
@@ -131,6 +132,60 @@ export function ChokepointDetail({ point, reading, nearby, onClose }: {
           </div>
         </div>
       )}
+    </Shell>
+  )
+}
+
+export function LaneDetail({ route, onClose }: {
+  route: LaneRoute
+  onClose: () => void
+}) {
+  const tierName = route.tier === 'major' ? 'Major route'
+    : route.tier === 'middle' ? 'Secondary route' : 'Minor route'
+
+  return (
+    <Shell
+      title={tierName}
+      sub={`${route.miles.toLocaleString()} nautical miles`}
+      onClose={onClose}
+    >
+      <Row label="From" value={describeEnd(route.from)} />
+      <Row label="To" value={describeEnd(route.to)} />
+
+      {route.via.length > 0 ? (
+        <div style={{ marginTop: '10px', borderTop: '1px solid var(--border)', paddingTop: '9px' }}>
+          <div className="mono-label" style={{ color: 'var(--text-4)', marginBottom: '6px' }}>
+            Threads
+          </div>
+          {route.via.map(name => (
+            <div key={name} style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '3px 0',
+              fontSize: '13px', fontWeight: 600, color: 'var(--text)',
+            }}>
+              <span style={{
+                width: '7px', height: '7px', background: 'var(--seg-world)',
+                transform: 'rotate(45deg)', borderRadius: '2px', flex: 'none',
+              }} />
+              {name}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mono-label" style={{
+          color: 'var(--text-4)', marginTop: '10px',
+          borderTop: '1px solid var(--border)', paddingTop: '9px', lineHeight: 1.5,
+        }}>
+          Open-water leg — passes none of the 28 chokepoints.
+        </div>
+      )}
+
+      <div className="mono-label" style={{
+        color: 'var(--text-4)', marginTop: '10px',
+        borderTop: '1px solid var(--border)', paddingTop: '9px', lineHeight: 1.5,
+      }}>
+        A route ships follow, not a ship&apos;s track. Described from the line
+        itself — the dataset names none of them.
+      </div>
     </Shell>
   )
 }

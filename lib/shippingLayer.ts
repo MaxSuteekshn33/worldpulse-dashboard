@@ -159,25 +159,117 @@ export function paintChoke(
     `${Math.round(reading.recent)} ships a day · ${trend}${carries}`
 }
 
+/** Which lane, in a form that survives being put in React state. */
+export interface LaneRef { tier: 'major' | 'middle' | 'minor'; index: number }
+
+export interface LanePolyline {
+  line: google.maps.Polyline
+  /**
+   * An invisible, much wider line following the same path, which is what
+   * actually receives the click.
+   *
+   * Google hit-tests a polyline against its drawn stroke, and the minor lanes
+   * are drawn a shade under a pixel — so without this they are visible and
+   * effectively unclickable, which is the worst of both.
+   */
+  hit: google.maps.Polyline
+  ref: LaneRef
+}
+
+/** How wide the invisible click target is, in pixels. */
+const HIT_WEIGHT = 12
+
 /** Builds the lanes for the flat map, where Google owns the projection. */
-export function createLanePolylines(map: google.maps.Map): google.maps.Polyline[] {
-  const lines: google.maps.Polyline[] = []
+export function createLanePolylines(
+  map: google.maps.Map,
+  onPick?: (ref: LaneRef) => void,
+): LanePolyline[] {
+  const lines: LanePolyline[] = []
   for (const tier of LANE_TIERS) {
-    for (const flat of LANES[tier.key]) {
+    LANES[tier.key].forEach((flat, index) => {
       const path: google.maps.LatLngLiteral[] = []
       for (let i = 0; i < flat.length; i += 2) path.push({ lng: flat[i], lat: flat[i + 1] })
-      lines.push(new google.maps.Polyline({
+      const line = new google.maps.Polyline({
         path,
         map,
+        // The drawn line never takes the click; the one below does.
         clickable: false,
         strokeColor: tier.color,
         strokeOpacity: tier.opacity,
         strokeWeight: tier.weight,
         zIndex: 1,
-      }))
-    }
+      })
+      const hit = new google.maps.Polyline({
+        path,
+        map,
+        clickable: Boolean(onPick),
+        strokeOpacity: 0,
+        strokeWeight: HIT_WEIGHT,
+        zIndex: 2,
+      })
+      const ref: LaneRef = { tier: tier.key, index }
+      if (onPick) hit.addListener('click', () => onPick(ref))
+      lines.push({ line, hit, ref })
+    })
   }
   return lines
+}
+
+/** Repaints the lanes so the chosen one stands out from the rest. */
+export function highlightLane(lines: LanePolyline[], picked: LaneRef | null): void {
+  for (const { line, ref } of lines) {
+    const tier = LANE_TIERS.find(t => t.key === ref.tier)!
+    const on = picked && picked.tier === ref.tier && picked.index === ref.index
+    line.setOptions({
+      strokeColor: on ? '#9FD4EA' : tier.color,
+      strokeOpacity: on ? 1 : tier.opacity,
+      strokeWeight: on ? Math.max(3, tier.weight * 2.2) : tier.weight,
+      zIndex: on ? 3 : 1,
+    })
+  }
+}
+
+/** Distance from a point to a segment, in pixels. */
+function toSegment(
+  px: number, py: number,
+  ax: number, ay: number, bx: number, by: number,
+): number {
+  const dx = bx - ax
+  const dy = by - ay
+  const len = dx * dx + dy * dy
+  const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len))
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+}
+
+/**
+ * The lane nearest a click on the globe, where there are no polylines to
+ * listen to — the lanes are strokes on a canvas, so the hit test has to be
+ * done against the geometry by hand.
+ */
+export function pickLaneAt(
+  x: number, y: number,
+  project: (lat: number, lon: number) => { x: number; y: number; front: boolean },
+  within = 10,
+): LaneRef | null {
+  let best: LaneRef | null = null
+  let bestD = within
+
+  for (const tier of LANE_TIERS) {
+    LANES[tier.key].forEach((flat, index) => {
+      let prev: { x: number; y: number } | null = null
+      for (let i = 0; i < flat.length; i += 2) {
+        const p = project(flat[i + 1], flat[i])
+        if (!p.front) { prev = null; continue }
+        if (prev) {
+          const d = toSegment(x, y, prev.x, prev.y, p.x, p.y)
+          if (d < bestD) { bestD = d; best = { tier: tier.key, index } }
+        }
+        prev = p
+      }
+    })
+  }
+
+  return best
 }
 
 /**
@@ -191,6 +283,7 @@ export function drawLanesOnGlobe(
   ctx: CanvasRenderingContext2D,
   project: (lat: number, lon: number) => { x: number; y: number; front: boolean },
   radius: number,
+  picked?: LaneRef | null,
 ): void {
   // The globe is drawn smaller than the flat map, so the lanes thin with it.
   const scale = Math.max(0.5, radius / 240)
@@ -202,7 +295,13 @@ export function drawLanesOnGlobe(
     ctx.globalAlpha = tier.opacity
     ctx.lineWidth = tier.weight * scale
 
-    for (const flat of LANES[tier.key]) {
+    LANES[tier.key].forEach((flat, index) => {
+      const on = picked && picked.tier === tier.key && picked.index === index
+      if (on) {
+        ctx.strokeStyle = '#9FD4EA'
+        ctx.globalAlpha = 1
+        ctx.lineWidth = Math.max(2, tier.weight * 2.2 * scale)
+      }
       ctx.beginPath()
       let drawing = false
       for (let i = 0; i < flat.length; i += 2) {
@@ -212,7 +311,12 @@ export function drawLanesOnGlobe(
         else { ctx.moveTo(p.x, p.y); drawing = true }
       }
       ctx.stroke()
-    }
+      if (on) {
+        ctx.strokeStyle = tier.color
+        ctx.globalAlpha = tier.opacity
+        ctx.lineWidth = tier.weight * scale
+      }
+    })
   }
 
   ctx.globalAlpha = 1

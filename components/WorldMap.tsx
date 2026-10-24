@@ -12,14 +12,20 @@ import type { Layer } from '@/components/LayerTabs'
 import type { ChokepointReading } from '@/lib/shipping'
 import type { Vessel } from '@/lib/vessels'
 import { type Trails, createVesselOverlay, drawTrails, drawVessels, extendTrails } from '@/lib/vesselLayer'
-import { ChokepointDetail, ShipDetail } from '@/components/SeaDetail'
 import {
   type ChokeMarker,
+  type LanePolyline,
+  type LaneRef,
   createChokeMarkers,
   createLanePolylines,
   drawLanesOnGlobe,
+  highlightLane,
   paintChoke,
+  pickLaneAt,
 } from '@/lib/shippingLayer'
+import { LANES } from '@/lib/lanes'
+import { describeLane } from '@/lib/laneInfo'
+import { ChokepointDetail, LaneDetail, ShipDetail } from '@/components/SeaDetail'
 import { type GlobeView, createGlobeView } from '@/lib/globeView'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS, type Segment } from '@/lib/segments'
@@ -243,7 +249,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   // The shipping layer, built the first time it is asked for and kept after.
   const layerRef = useRef<Layer>(layer)
   const chokeRef = useRef<Map<string, ChokeMarker>>(new Map())
-  const lanesRef = useRef<google.maps.Polyline[]>([])
+  const lanesRef = useRef<LanePolyline[]>([])
   const shippingRef = useRef(false)
   const vesselsRef = useRef<Vessel[]>([])
   const vesselOverlayRef = useRef<(google.maps.OverlayView & { redraw: () => void }) | null>(null)
@@ -251,14 +257,23 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   const [fleet, setFleet] = useState<{ count: number; configured: boolean } | null>(null)
   const [vessels, setVessels] = useState<Vessel[]>([])
   const [readings, setReadings] = useState<Map<string, ChokepointReading>>(new Map())
-  const [picked, setPicked] = useState<{ kind: 'choke'; id: string } | { kind: 'ship'; mmsi: number } | null>(null)
+  const [picked, setPicked] = useState<
+    | { kind: 'choke'; id: string }
+    | { kind: 'ship'; mmsi: number }
+    | { kind: 'lane'; ref: LaneRef }
+    | null
+  >(null)
   const trailsRef = useRef<Trails>(new Map())
   const capturedRef = useRef(0)
   // Read inside the draw loops, which must not be rebuilt when it changes —
   // mirrored through a ref rather than captured, and synced after the render
   // rather than during it.
   const pickedRef = useRef(picked)
-  useEffect(() => { pickedRef.current = picked }, [picked])
+  useEffect(() => {
+    pickedRef.current = picked
+    highlightLane(lanesRef.current, picked?.kind === 'lane' ? picked.ref : null)
+    globeRef.current?.refresh()
+  }, [picked])
   const router = useRouter()
   const isCompact = useIsCompact()
   // Stable: NavTransition memoises it on the router, so naming it as a
@@ -570,7 +585,8 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       // not mean rebuilding the globe.
       drawOverlay: (ctx, project, radius) => {
         if (layerRef.current !== 'shipping') return
-        drawLanesOnGlobe(ctx, project, radius)
+        const lane = pickedRef.current?.kind === 'lane' ? pickedRef.current.ref : null
+        drawLanesOnGlobe(ctx, project, radius, lane)
         const place = (lat: number, lon: number) => {
           const p = project(lat, lon)
           return p.front ? p : null
@@ -657,7 +673,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     shippingRef.current = true
 
     chokeRef.current = createChokeMarkers(CHOKEPOINTS, id => setPicked({ kind: 'choke', id }))
-    lanesRef.current = createLanePolylines(map)
+    lanesRef.current = createLanePolylines(map, ref => setPicked({ kind: 'lane', ref }))
 
     // Positioned by Google while the flat map has them, exactly as the
     // country bubbles are.
@@ -751,7 +767,10 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       for (const m of chokeRef.current.values()) {
         m.box.style.display = shipping ? '' : 'none'
       }
-      for (const line of lanesRef.current) line.setMap(shipping ? map : null)
+      for (const l of lanesRef.current) {
+        l.line.setMap(shipping ? map : null)
+        l.hit.setMap(shipping ? map : null)
+      }
 
       globeRef.current?.setMarkers(activeMarkers())
       globeRef.current?.refresh()
@@ -875,7 +894,10 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
             const d = Math.hypot(p.x - x, p.y - y)
             if (d < bestD) { bestD = d; best = v }
           }
-          setPicked(best ? { kind: 'ship', mmsi: best.mmsi } : null)
+          if (best) { setPicked({ kind: 'ship', mmsi: best.mmsi }); return }
+          // Nothing close enough to be a ship, so try the lanes underneath.
+          const lane = pickLaneAt(x, y, (lat, lon) => globe.project(lat, lon))
+          setPicked(lane ? { kind: 'lane', ref: lane } : null)
         }}
         className="globe-stage"
         style={{
@@ -967,6 +989,15 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
                 point={point}
                 reading={readings.get(point.id) ?? null}
                 nearby={here}
+                onClose={() => setPicked(null)}
+              />
+            )
+          })() : picked.kind === 'lane' ? (() => {
+            const flat = LANES[picked.ref.tier][picked.ref.index]
+            if (!flat) return null
+            return (
+              <LaneDetail
+                route={describeLane(picked.ref.tier, flat)}
                 onClose={() => setPicked(null)}
               />
             )
