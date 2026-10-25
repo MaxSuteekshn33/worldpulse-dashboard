@@ -37,21 +37,42 @@ function check(name: string, ok: boolean, detail = '') {
 
 console.log('\nViewport quantizer')
 
+/** Rough nautical miles between two points, for the offset checks below. */
+function nmBetween(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const dLon = (bLon - aLon) * Math.cos(((aLat + bLat) / 2 * Math.PI) / 180)
+  return Math.hypot(bLat - aLat, dLon) * 60
+}
+
 // A city-scale view becomes a circle on the grid.
 const london = quantizeScope(51.5, -0.12, 100)
 check('london is a radius scope', london.kind === 'radius')
 if (london.kind === 'radius') {
-  check('london lat snaps to the 5 degree grid', london.lat === 50, String(london.lat))
-  check('london lon snaps to the 5 degree grid', london.lon === 0, String(london.lon))
   check('london radius snaps to a 25 mile step', london.dist === 100, String(london.dist))
 }
 
-// The point of the whole mechanism: a pan that stays inside one cell has to
-// produce the same key, or the cache never gets a hit.
+// The property that matters, and the one the first grid got wrong: a circle
+// has to stay over the thing it was asked about. A flat five degree grid is
+// about 300 miles across, so a 250 mile circle could be centred 150 miles
+// from the view — further than its own radius — and miss the traffic someone
+// had zoomed in to look at. The grid is tied to the radius now, so the offset
+// is bounded by a fraction of it at every zoom.
+for (const [lat, lon, want] of [[51.5, -0.12, 100], [41.9, 12.5, 250], [-33.9, 151.2, 25]] as const) {
+  const s = quantizeScope(lat, lon, want)
+  if (s.kind !== 'radius') { check(`a ${want}nm view stays a circle`, false); continue }
+  const off = nmBetween(lat, lon, s.lat, s.lon)
+  check(
+    `a ${want}nm circle stays within half its radius of the view`,
+    off <= s.dist * 0.75,
+    `off by ${off.toFixed(0)}nm of ${s.dist}nm`,
+  )
+}
+
+// A pan small enough to stay inside one cell still has to produce the same
+// key, or the cache never gets a hit and every drag hits the provider.
 check(
-  'a pan within one cell is the same request',
-  scopeKey(quantizeScope(51.5, -0.12, 100)) === scopeKey(quantizeScope(52.4, 1.2, 110)),
-  `${scopeKey(quantizeScope(51.5, -0.12, 100))} vs ${scopeKey(quantizeScope(52.4, 1.2, 110))}`,
+  'a small pan is the same request',
+  scopeKey(quantizeScope(51.5, -0.12, 100)) === scopeKey(quantizeScope(51.56, -0.05, 100)),
+  `${scopeKey(quantizeScope(51.5, -0.12, 100))} vs ${scopeKey(quantizeScope(51.56, -0.05, 100))}`,
 )
 
 // And a pan that leaves it must not.

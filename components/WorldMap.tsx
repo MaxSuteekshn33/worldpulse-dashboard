@@ -15,6 +15,8 @@ import { type Trails, createVesselOverlay, drawTrails, drawVessels, extendTrails
 import {
   FLIGHT_REVALIDATE,
   type Aircraft,
+  MAX_CELLS,
+  MAX_RADIUS_NM,
   type Scope,
   quantizeScope,
   scopeKey,
@@ -802,17 +804,52 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
    * grid, which is what makes panning cheap: drag inside one cell and the URL
    * does not change, so nothing is re-fetched.
    */
-  function flightScope(): Scope {
+  function flightScopes(): Scope[] {
     const map = mapRef.current
-    if (viewRef.current === 'globe' || !map) return { kind: 'mil' }
+    if (viewRef.current === 'globe' || !map) return [{ kind: 'mil' }]
     const bounds = map.getBounds()
-    if (!bounds) return { kind: 'mil' }
+    if (!bounds) return [{ kind: 'mil' }]
+
     const centre = bounds.getCenter()
     const ne = bounds.getNorthEast()
-    // Corner to centre, so the circle covers the corners of the viewport
-    // rather than inscribing it and leaving the edges empty.
-    const radius = milesBetween(centre.lat(), centre.lng(), ne.lat(), ne.lng())
-    return quantizeScope(centre.lat(), centre.lng(), radius)
+    const halfH = milesBetween(centre.lat(), centre.lng(), ne.lat(), centre.lng())
+    const halfW = milesBetween(centre.lat(), centre.lng(), centre.lat(), ne.lng())
+    // Corner to centre, so a circle covers the corners of the viewport rather
+    // than inscribing it and leaving the edges empty.
+    const corner = Math.hypot(halfW, halfH)
+
+    if (corner <= MAX_RADIUS_NM) {
+      return [quantizeScope(centre.lat(), centre.lng(), corner)]
+    }
+
+    // Too wide for one circle. Rather than give up on real traffic and fall
+    // back to the worldwide military feed — which is what made a view of
+    // France show four aircraft on an empty map — cover the viewport with
+    // one circle per quadrant.
+    const quarter = Math.hypot(halfW / 2, halfH / 2)
+    if (quarter <= MAX_RADIUS_NM) {
+      const dLat = halfH / 2 / 60
+      const cos = Math.cos((centre.lat() * Math.PI) / 180)
+      const dLon = Math.abs(cos) < 1e-6 ? 0 : halfW / 2 / 60 / cos
+
+      const out: Scope[] = []
+      const seen = new Set<string>()
+      for (const sy of [-1, 1]) {
+        for (const sx of [-1, 1]) {
+          const cell = quantizeScope(centre.lat() + sy * dLat, centre.lng() + sx * dLon, quarter)
+          // Quantizing can land neighbouring quadrants on the same cell, and
+          // asking a donated feed the same question twice is just rude.
+          const key = scopeKey(cell)
+          if (seen.has(key)) continue
+          seen.add(key)
+          out.push(cell)
+        }
+      }
+      return out.slice(0, MAX_CELLS)
+    }
+
+    // Genuinely global. The military feed is the honest answer here.
+    return [{ kind: 'mil' }]
   }
 
   /**
@@ -956,36 +993,57 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     let cancelled = false
 
     const pull = async () => {
-      const scope = flightScope()
-      const key = scopeKey(scope)
+      const scopes = flightScopes()
+      const key = scopes.map(scopeKey).join('+')
+      const militaryOnly = scopes[0].kind === 'mil'
       try {
-        const res = await fetch(`/api/flights?${scopeQuery(scope)}`)
-        const data = await res.json()
+        // One request per circle, in parallel. Each is its own cache key, so
+        // a pan that only changes one quadrant still reuses the other three.
+        const answers = await Promise.all(scopes.map(async s => {
+          try {
+            const res = await fetch(`/api/flights?${scopeQuery(s)}`)
+            return await res.json()
+          } catch {
+            return null
+          }
+        }))
         if (cancelled) return
 
-        if (data.unavailable) {
+        // Circles overlap at the seams, so the same aircraft arrives more
+        // than once; the hex code is what makes it one aircraft again.
+        const byHex = new Map<string, Aircraft>()
+        let answered = false
+        let latest = 0
+        for (const data of answers) {
+          if (!data || data.unavailable) continue
+          answered = true
+          latest = Math.max(latest, Date.parse(data.fetchedAt ?? '') || 0)
+          for (const a of (data.aircraft ?? []) as Aircraft[]) byHex.set(a.hex, a)
+        }
+
+        if (!answered) {
           // A donated feed under load is allowed to refuse. Keep the last
           // known sky on screen and say so, rather than blanking the map in a
           // way that reads as "nothing is flying".
           setSky({
             count: aircraftRef.current.length,
             military: aircraftRef.current.filter(a => a.military).length,
-            militaryOnly: data.military === true,
+            militaryOnly,
             unavailable: true,
           })
           return
         }
 
         scopeRef.current = key
-        const next: Aircraft[] = data.aircraft ?? []
+        const next: Aircraft[] = [...byHex.values()]
         aircraftRef.current = next
         airTrailsRef.current = extendAirTrails(airTrailsRef.current, next)
-        fetchedRef.current = Date.parse(data.fetchedAt ?? '') || Date.now()
+        fetchedRef.current = latest || Date.now()
         setAircraft(next)
         setSky({
           count: next.length,
           military: next.filter(a => a.military).length,
-          militaryOnly: data.military === true,
+          militaryOnly,
           unavailable: false,
         })
         flightOverlayRef.current?.redraw()
@@ -1006,7 +1064,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     const timer = window.setInterval(pull, FLIGHT_REVALIDATE * 1000)
     const idle = mapRef.current?.addListener('idle', () => {
       if (viewRef.current !== 'map') return
-      if (scopeKey(flightScope()) !== scopeRef.current) pull()
+      if (flightScopes().map(scopeKey).join('+') !== scopeRef.current) pull()
     })
     // The globe redraws on its own clock; the flat map only redraws when the
     // map itself changes, so without this the sky would sit still between

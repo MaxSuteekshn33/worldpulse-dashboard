@@ -34,6 +34,21 @@
 const BASE = 'https://api.adsb.lol/v2'
 
 /**
+ * Who is asking, and where to complain.
+ *
+ * Not optional and not politeness: adsb.lol answers an anonymous or default
+ * user agent with `403 User-Agent too generic; include valid contact info.`
+ * Node's fetch sends undici's own default, so every request from the server
+ * was refused while the same URL in a browser or curl worked — which made the
+ * layer look like a feed with no aircraft in it rather than a feed we were
+ * being turned away from.
+ *
+ * The feed is donated by volunteers who ask to know who is hitting it. This
+ * is how they are told.
+ */
+const USER_AGENT = 'WorldPulse/1.0 (+https://worldpulse-dashboard-gov9.vercel.app)'
+
+/**
  * How long one answer is served before another is fetched.
  *
  * Deliberately the same 45 seconds as the vessel capture. The spec that
@@ -63,7 +78,17 @@ export const MAX_RADIUS_NM = 250
  * radius it is paired with, so the rounding never moves the centre far enough
  * to push the visible area outside what was fetched.
  */
-const GRID_DEG = 5
+/**
+ * How coarsely a circle's centre is snapped, as a fraction of its own radius.
+ *
+ * It was a flat five degrees, which is about 300 nautical miles across — more
+ * than the radius being requested. So a 250 mile circle could be centred 150
+ * miles from what you were actually looking at, and the traffic you came to
+ * see could fall outside it. Tying the grid to the radius keeps the circle
+ * over the view while still collapsing a pan into the same cache key.
+ */
+const GRID_FRACTION = 0.5
+const MIN_GRID_DEG = 0.25
 const RADIUS_STEP_NM = 25
 
 /** One aircraft, as the map needs it. */
@@ -104,6 +129,22 @@ export type Scope =
   | { kind: 'radius'; lat: number; lon: number; dist: number }
   | { kind: 'mil' }
 
+/**
+ * How many of the provider's circles may be used to cover one viewport.
+ *
+ * The provider caps a query at 250 miles, and the first version treated that
+ * as a cap on the whole layer: any view wider than one circle fell back to
+ * the worldwide military feed. In practice that meant a view of France — a
+ * perfectly ordinary thing to look at — showed four military aircraft on an
+ * empty map, because its corner-to-centre distance is about 420 miles.
+ *
+ * Four circles cover a view roughly twice that wide, which is most of what
+ * anyone looks at. Beyond it the military feed really is the honest answer.
+ * Each circle is a separate request, but each is also its own cache key, so a
+ * pan within a cell costs nothing and viewers share each other's.
+ */
+export const MAX_CELLS = 4
+
 /** Rounds to a step, away from floating point noise. */
 function snap(value: number, step: number): number {
   return Math.round(value / step) * step
@@ -127,10 +168,11 @@ export function quantizeScope(lat: number, lon: number, radiusNm: number): Scope
   // Clamped before snapping: a very tight zoom still asks for a sensible
   // circle rather than a zero-mile one that would come back empty.
   const dist = Math.min(MAX_RADIUS_NM, Math.max(RADIUS_STEP_NM, snap(radiusNm, RADIUS_STEP_NM)))
-  const snappedLat = Math.max(-85, Math.min(85, snap(lat, GRID_DEG)))
+  const gridDeg = Math.max(MIN_GRID_DEG, (dist / 60) * GRID_FRACTION)
+  const snappedLat = Math.max(-85, Math.min(85, snap(lat, gridDeg)))
   // Longitude wraps, so snapping near the antimeridian has to come back into
   // range rather than asking for 185 degrees east.
-  let snappedLon = snap(lon, GRID_DEG)
+  let snappedLon = snap(lon, gridDeg)
   if (snappedLon > 180) snappedLon -= 360
   if (snappedLon < -180) snappedLon += 360
 
@@ -264,13 +306,18 @@ function toAircraft(raw: RawAircraft): Aircraft | null {
  */
 export async function fetchAircraft(scope: Scope): Promise<Aircraft[]> {
   const res = await fetch(endpoint(scope), {
-    headers: { accept: 'application/json' },
+    headers: { accept: 'application/json', 'user-agent': USER_AGENT },
     // Cached by us, deliberately, rather than by Next's data cache: the
     // route holds one answer per scope in module memory and sets its own
     // CDN headers, which keeps the two caches from disagreeing about age.
     cache: 'no-store',
   })
-  if (!res.ok) throw new Error(`adsb.lol ${res.status}`)
+  if (!res.ok) {
+    // Worth quoting: this provider explains refusals in the body, and the
+    // message is the difference between "no aircraft" and "not allowed".
+    const why = await res.text().catch(() => '')
+    throw new Error(`adsb.lol ${res.status}${why ? `: ${why.slice(0, 120).trim()}` : ''}`)
+  }
 
   const body = await res.json()
   // The schema calls the array `ac`; older and adjacent implementations of the
