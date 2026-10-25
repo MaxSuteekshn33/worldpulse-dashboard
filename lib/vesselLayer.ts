@@ -175,7 +175,7 @@ export function drawVessels(
 export function createVesselOverlay(
   map: google.maps.Map,
   getVessels: () => Vessel[],
-  getState: () => { hours: number; trails: Trails; selected?: number },
+  getState: () => { active: boolean; hours: number; trails: Trails; selected?: number },
 ): google.maps.OverlayView & { redraw: () => void } {
   const canvas = document.createElement('canvas')
   canvas.style.cssText = 'position:absolute;pointer-events:none'
@@ -229,6 +229,13 @@ export function createVesselOverlay(
     }
 
     const state = getState()
+    // Checked after the clear, so leaving the shipping layer empties the
+    // canvas on the next draw. Without it the overlay kept painting whatever
+    // it last held onto whichever layer was showing — open Shipping once and
+    // the fleet followed you to the flights map and sat there among the
+    // aircraft, which is exactly how it was reported.
+    if (!state.active) return
+
     drawTrails(ctx, place, state.trails)
     drawVessels(ctx, place, getVessels(), 1, state.hours, state.selected)
   }

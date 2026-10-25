@@ -254,13 +254,26 @@ function judge(r: HubReading): HubReading['verdict'] {
   return 'flowing'
 }
 
-/** Reads every hub against one viewport's worth of sky. */
+/**
+ * Reads every hub against one viewport's worth of sky.
+ *
+ * `only`, when given, is the set of hubs the sky was actually gathered
+ * around — the wide-zoom case, where the layer asks for a circle about a few
+ * hubs rather than for the whole viewport. Every other hub is then left
+ * uncounted however much of its circle happens to be on screen, because the
+ * aircraft near it were never requested and counting them would report a
+ * busy airport as a shut one.
+ */
 export function readHubs(
   hubs: AirHub[],
   sky: Aircraft[],
   view: { north: number; south: number; east: number; west: number } | null,
+  only?: Set<string> | null,
 ): Map<string, HubReading> {
   const out = new Map<string, HubReading>()
-  for (const hub of hubs) out.set(hub.id, readHub(hub, sky, coverOf(hub, view)))
+  for (const hub of hubs) {
+    const cover = only && !only.has(hub.id) ? 'none' : coverOf(hub, view)
+    out.set(hub.id, readHub(hub, sky, cover))
+  }
   return out
 }

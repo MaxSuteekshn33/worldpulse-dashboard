@@ -44,7 +44,7 @@ import { LANES } from '@/lib/lanes'
 import { describeLane } from '@/lib/laneInfo'
 import { ChokepointDetail, LaneDetail, ShipDetail } from '@/components/SeaDetail'
 import { AircraftDetail, CorridorDetail, HubDetail } from '@/components/SkyDetail'
-import { CORRIDORS, HUBS, HUB_BY_ID } from '@/lib/airways'
+import { type AirHub, CORRIDORS, HUBS, HUB_BY_ID, arcMiles } from '@/lib/airways'
 import { type HubReading, readHubs } from '@/lib/airspace'
 import {
   type CorridorPolyline,
@@ -214,6 +214,27 @@ const MARKER_TRANSITION = 'opacity .45s ease, transform .55s cubic-bezier(.2,1.2
  */
 const GLOBE_PIXELS = 360_000
 
+/**
+ * What the flights layer is showing, and what it had to ask for to show it.
+ *
+ * `full` means every aircraft in the viewport, which is only possible where
+ * four of the provider's circles can cover it. `sample` means a circle around
+ * each of a few hubs on screen, plus the military feed — real traffic, but
+ * explicitly not all of it. `mil` is the worldwide military feed alone, which
+ * is all there is over open ocean or on the globe.
+ *
+ * `hubs` names the hubs that were actually sampled, because they are the only
+ * ones whose figures may be read afterwards: a hub nobody asked about would
+ * otherwise count zero aircraft and report itself shut.
+ */
+interface FlightPlan {
+  scopes: Scope[]
+  mode: 'full' | 'sample' | 'mil'
+  hubs: string[]
+}
+
+const MIL_ONLY: FlightPlan = { scopes: [{ kind: 'mil' }], mode: 'mil', hubs: [] }
+
 function enterDelayFor(lng: number): number {
   const west = (lng + 180) / 360
   return Math.round(west * SWEEP_MS + Math.random() * 70)
@@ -295,16 +316,25 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   // The sky's standing geography: the hubs and the corridors between them.
   // Unlike the aircraft, these exist before any fetch and survive every one.
   const hubRef = useRef<Map<string, HubMarker>>(new Map())
-  // Whether the sky currently held is the worldwide military feed rather than
-  // everything in the viewport. The hubs cannot be read from the first.
-  const militaryOnlyRef = useRef(true)
+  // What the sky currently held actually is, and — when it is a sample —
+  // which hubs it was gathered around. The hubs cannot be read from a feed
+  // that was never asked about them.
+  const modeRef = useRef<FlightPlan['mode']>('mil')
+  const sampledRef = useRef<Set<string> | null>(null)
   const corridorsRef = useRef<CorridorPolyline[]>([])
   // Only the summary is state: it changes once a capture, not once a ship.
   const [fleet, setFleet] = useState<{ count: number; configured: boolean } | null>(null)
   const [vessels, setVessels] = useState<Vessel[]>([])
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
   const [sky, setSky] = useState<
-    { count: number; military: number; militaryOnly: boolean; unavailable: boolean } | null
+    {
+      count: number
+      military: number
+      mode: FlightPlan['mode']
+      /** How many hubs the sample was gathered around, when it is one. */
+      sampled: number
+      unavailable: boolean
+    } | null
   >(null)
   const [readings, setReadings] = useState<Map<string, ChokepointReading>>(new Map())
   // Worked out from the aircraft already on screen rather than fetched, so
@@ -784,6 +814,10 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       map,
       () => vesselsRef.current,
       () => ({
+        // Read on every draw rather than by detaching the overlay, exactly as
+        // the sky's is, so switching layers cannot leave ships painted over
+        // the aircraft.
+        active: layerRef.current === 'shipping',
         hours: capturedRef.current ? (Date.now() - capturedRef.current) / 3_600_000 : 0,
         trails: trailsRef.current,
         selected: pickedRef.current?.kind === 'ship' ? pickedRef.current.mmsi : undefined,
@@ -829,20 +863,55 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   }
 
   /**
+   * Hubs spread across the view rather than bunched in one corner of it.
+   *
+   * Taking the first three in view would mean three European airports and
+   * nothing anywhere else, so this starts from the one nearest the middle of
+   * the screen — most likely what is being looked at — and then repeatedly
+   * takes whichever hub is farthest from everything already taken.
+   */
+  function spreadOut(hubs: AirHub[], atLat: number, atLon: number, count: number): AirHub[] {
+    const rest = [...hubs]
+    let bestI = 0
+    let bestD = Infinity
+    rest.forEach((h, i) => {
+      const d = arcMiles(h.lat, h.lon, atLat, atLon)
+      if (d < bestD) { bestD = d; bestI = i }
+    })
+
+    const picked = rest.splice(bestI, 1)
+    while (picked.length < count && rest.length) {
+      let farI = 0
+      let farD = -1
+      rest.forEach((h, i) => {
+        let near = Infinity
+        for (const p of picked) near = Math.min(near, arcMiles(h.lat, h.lon, p.lat, p.lon))
+        if (near > farD) { farD = near; farI = i }
+      })
+      picked.push(...rest.splice(farI, 1))
+    }
+    return picked
+  }
+
+  /**
    * What to ask the flights API for, given what is currently on screen.
    *
-   * The globe shows the whole world and the flat map zoomed out shows more
-   * than the provider's 250 mile radius cap allows, so both resolve to the
-   * worldwide military feed; a flat map zoomed in resolves to a circle around
-   * what is visible. `quantizeScope` then rounds that circle onto a coarse
-   * grid, which is what makes panning cheap: drag inside one cell and the URL
-   * does not change, so nothing is re-fetched.
+   * Three answers, in descending order of how much of the sky they cover:
+   * one circle around a tight view, four circles around a country-sized one,
+   * and — past that — a sample of a few hub circles with the military feed
+   * alongside. The globe is always the military feed, since it shows the
+   * whole world at once.
+   *
+   * `quantizeScope` rounds every circle onto a coarse grid, which is what
+   * makes panning cheap: drag inside one cell and the URL does not change, so
+   * nothing is re-fetched. Hub circles are rounded the same way and land on a
+   * handful of fixed keys, which makes them the most cacheable of the three.
    */
-  function flightScopes(): Scope[] {
+  function flightPlan(): FlightPlan {
     const map = mapRef.current
-    if (viewRef.current === 'globe' || !map) return [{ kind: 'mil' }]
+    if (viewRef.current === 'globe' || !map) return MIL_ONLY
     const bounds = map.getBounds()
-    if (!bounds) return [{ kind: 'mil' }]
+    if (!bounds) return MIL_ONLY
 
     const centre = bounds.getCenter()
     const ne = bounds.getNorthEast()
@@ -853,7 +922,11 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     const corner = Math.hypot(halfW, halfH)
 
     if (corner <= MAX_RADIUS_NM) {
-      return [quantizeScope(centre.lat(), centre.lng(), corner)]
+      return {
+        scopes: [quantizeScope(centre.lat(), centre.lng(), corner)],
+        mode: 'full',
+        hubs: [],
+      }
     }
 
     // Too wide for one circle. Rather than give up on real traffic and fall
@@ -879,11 +952,35 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           out.push(cell)
         }
       }
-      return out.slice(0, MAX_CELLS)
+      return { scopes: out.slice(0, MAX_CELLS), mode: 'full', hubs: [] }
     }
 
-    // Genuinely global. The military feed is the honest answer here.
-    return [{ kind: 'mil' }]
+    // Wider than four circles can cover. Covering it properly would take
+    // dozens, which the feed's five hundred a day cannot pay for — but
+    // answering with the military feed alone leaves a continent-wide view
+    // showing forty aircraft and an otherwise empty map, which is what it
+    // did and what was reported.
+    //
+    // So it samples instead. The hubs on screen are, by construction, where
+    // the traffic is, and a circle around three of them gives dense clusters
+    // of real aircraft over real cities — something to see at this zoom, and
+    // honestly labelled as a sample rather than as everything flying. The
+    // military feed rides along, so the one worldwide signal is not lost.
+    const inView = HUBS.filter(h => bounds.contains(new google.maps.LatLng(h.lat, h.lon)))
+    if (inView.length) {
+      const picked = spreadOut(inView, centre.lat(), centre.lng(), MAX_CELLS - 1)
+      return {
+        scopes: [
+          { kind: 'mil' },
+          ...picked.map(h => quantizeScope(h.lat, h.lon, MAX_RADIUS_NM)),
+        ],
+        mode: 'sample',
+        hubs: picked.map(h => h.id),
+      }
+    }
+
+    // Nothing but ocean in view. The military feed is the honest answer.
+    return MIL_ONLY
   }
 
   /**
@@ -963,9 +1060,13 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
    * military. Counted naively, Frankfurt reported "quiet, 0 in, 0 out" on an
    * ordinary weekday afternoon — a reading, and a wrong one. Withholding the
    * viewport withholds the figures, which is the honest answer.
+   *
+   * A sampled sky is the same trap one step along: the hubs that were
+   * sampled can be read, and the ones that merely happen to be on screen
+   * cannot, which is what `sampledRef` carries.
    */
   function paintHubs(sky: Aircraft[]) {
-    const readable = viewRef.current === 'map' && !militaryOnlyRef.current
+    const readable = viewRef.current === 'map' && modeRef.current !== 'mil'
     const bounds = readable ? mapRef.current?.getBounds() : null
     const box = bounds
       ? {
@@ -976,7 +1077,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         }
       : null
 
-    const next = readHubs(HUBS, sky, box)
+    const next = readHubs(HUBS, sky, box, sampledRef.current)
     setHubReadings(next)
     for (const h of HUBS) {
       const m = hubRef.current.get(h.id)
@@ -1040,9 +1141,11 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         c.hit.setMap(flights ? map : null)
       }
 
-      // The sky canvas empties itself once it knows the layer changed; without
-      // this it would wait for the next pan to notice.
+      // Both canvases empty themselves once they know the layer changed;
+      // without this they would wait for the next pan to notice, which is
+      // long enough to see the other layer's marks on this one.
       flightOverlayRef.current?.redraw()
+      vesselOverlayRef.current?.redraw()
 
       globeRef.current?.setMarkers(activeMarkers())
       globeRef.current?.refresh()
@@ -1103,9 +1206,9 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     let cancelled = false
 
     const pull = async () => {
-      const scopes = flightScopes()
+      const plan = flightPlan()
+      const scopes = plan.scopes
       const key = scopes.map(scopeKey).join('+')
-      const militaryOnly = scopes[0].kind === 'mil'
       try {
         // One request per circle, in parallel. Each is its own cache key, so
         // a pan that only changes one quadrant still reuses the other three.
@@ -1138,7 +1241,8 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           setSky({
             count: aircraftRef.current.length,
             military: aircraftRef.current.filter(a => a.military).length,
-            militaryOnly,
+            mode: plan.mode,
+            sampled: plan.hubs.length,
             unavailable: true,
           })
           return
@@ -1153,10 +1257,12 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         setSky({
           count: next.length,
           military: next.filter(a => a.military).length,
-          militaryOnly,
+          mode: plan.mode,
+          sampled: plan.hubs.length,
           unavailable: false,
         })
-        militaryOnlyRef.current = militaryOnly
+        modeRef.current = plan.mode
+        sampledRef.current = plan.mode === 'sample' ? new Set(plan.hubs) : null
         paintHubs(next)
         flightOverlayRef.current?.redraw()
         globeRef.current?.refresh()
@@ -1165,7 +1271,8 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           setSky(s => ({
             count: s?.count ?? 0,
             military: s?.military ?? 0,
-            militaryOnly: s?.militaryOnly ?? true,
+            mode: s?.mode ?? 'mil',
+            sampled: s?.sampled ?? 0,
             unavailable: true,
           }))
         }
@@ -1176,7 +1283,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     const timer = window.setInterval(pull, FLIGHT_REVALIDATE * 1000)
     const idle = mapRef.current?.addListener('idle', () => {
       if (viewRef.current !== 'map') return
-      if (flightScopes().map(scopeKey).join('+') !== scopeRef.current) pull()
+      if (flightPlan().scopes.map(scopeKey).join('+') !== scopeRef.current) pull()
       // Even when the scope has not changed, which hubs are on screen has —
       // and that is what decides whether a hub can be counted at all.
       else paintHubs(aircraftRef.current)
@@ -1391,11 +1498,16 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         >
           {sky.unavailable
             ? 'Aircraft feed unavailable — showing last known'
-            : sky.militaryOnly
+            : sky.mode === 'mil'
               ? `${sky.military} military aircraft · worldwide${
                   view === 'map' ? ' · zoom in for all traffic' : ''
                 }`
-              : `${sky.count} aircraft · ${sky.military} military`}
+              : sky.mode === 'sample'
+                // Says "around N hubs" rather than a bare count, because the
+                // count is true and the impression a bare one gives is not:
+                // this is the traffic near a few airports, not the sky.
+                ? `${sky.count} aircraft around ${sky.sampled} hubs · zoom in for all traffic`
+                : `${sky.count} aircraft · ${sky.military} military`}
         </div>
       )}
 
