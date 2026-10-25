@@ -3,8 +3,14 @@
  *
  * The sibling of `lib/shippingLayer.ts`, and written to match it closely
  * enough that the two tabs feel like one dashboard: corridors stroke the way
- * lanes do, hub markers are the same DOM nodes moved between the map's
- * overlay pane and the globe's stage, and the colours mean the same things.
+ * lanes do, hub markers follow the chokepoints' pattern, and the colours
+ * mean the same things.
+ *
+ * One place it deliberately stops short of its sibling: there is nothing here
+ * that draws onto the globe. The flights layer is flat-map only — a sphere
+ * cannot be asked for the aircraft over the quarter of the world it is
+ * showing — so the globe equivalents of these were written, found to be
+ * drawing a corridor network with no traffic on it, and removed.
  *
  * What differs is where the colour comes from. A chokepoint is coloured by
  * how far off its own last year it is; a hub has no last year, so it is
@@ -178,8 +184,8 @@ export interface CorridorPolyline {
  * The corridor arcs, computed once.
  *
  * Sixty-four points each over thirty-four corridors is a couple of thousand
- * trigonometric calls, which is nothing — but it happens on every redraw of
- * the globe if it is not held, and the globe redraws thirty times a second.
+ * trigonometric calls — cheap, but there is no reason to repeat them every
+ * time the polylines are rebuilt.
  */
 const PATHS: ({ lat: number; lon: number }[] | null)[] = CORRIDORS.map(corridorPath)
 
@@ -246,88 +252,6 @@ export function highlightCorridor(
       zIndex: on ? 3 : 1,
     })
   }
-}
-
-/** Distance from a point to a segment, in pixels. */
-function toSegment(
-  px: number, py: number,
-  ax: number, ay: number, bx: number, by: number,
-): number {
-  const dx = bx - ax
-  const dy = by - ay
-  const len = dx * dx + dy * dy
-  const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len))
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
-}
-
-/**
- * The corridor nearest a click on the globe, where there are no polylines to
- * listen to — the arcs are strokes on a canvas, so the hit test has to be
- * done against the geometry by hand.
- */
-export function pickCorridorAt(
-  x: number, y: number,
-  project: (lat: number, lon: number) => { x: number; y: number; front: boolean },
-  within = 10,
-): CorridorRef | null {
-  let best: CorridorRef | null = null
-  let bestD = within
-
-  PATHS.forEach((arc, index) => {
-    if (!arc) return
-    let prev: { x: number; y: number } | null = null
-    for (const p of arc) {
-      const at = project(p.lat, p.lon)
-      if (!at.front) { prev = null; continue }
-      if (prev) {
-        const d = toSegment(x, y, prev.x, prev.y, at.x, at.y)
-        if (d < bestD) { bestD = d; best = { index } }
-      }
-      prev = at
-    }
-  })
-
-  return best
-}
-
-/**
- * Draws the corridors onto the globe.
- *
- * A segment is drawn only where both of its ends are on the near side, which
- * is what stops a route being painted straight across the planet from one
- * limb to the other.
- */
-export function drawCorridorsOnGlobe(
-  ctx: CanvasRenderingContext2D,
-  project: (lat: number, lon: number) => { x: number; y: number; front: boolean },
-  radius: number,
-  picked?: CorridorRef | null,
-): void {
-  const scale = Math.max(0.5, radius / 240)
-  ctx.lineJoin = 'round'
-  ctx.lineCap = 'round'
-
-  PATHS.forEach((arc, index) => {
-    if (!arc) return
-    const tier = CORRIDOR_TIERS.find(t => t.key === CORRIDORS[index].tier)!
-    const on = picked?.index === index
-
-    ctx.strokeStyle = on ? PICKED : tier.color
-    ctx.globalAlpha = on ? 1 : tier.opacity
-    ctx.lineWidth = on ? Math.max(2, tier.weight * 2.2 * scale) : tier.weight * scale
-
-    ctx.beginPath()
-    let drawing = false
-    for (const p of arc) {
-      const at = project(p.lat, p.lon)
-      if (!at.front) { drawing = false; continue }
-      if (drawing) ctx.lineTo(at.x, at.y)
-      else { ctx.moveTo(at.x, at.y); drawing = true }
-    }
-    ctx.stroke()
-  })
-
-  ctx.globalAlpha = 1
 }
 
 /** What a corridor connects, for the panel heading. */

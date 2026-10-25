@@ -25,8 +25,6 @@ import {
 import {
   type AirTrails,
   createFlightOverlay,
-  drawAirTrails,
-  drawAircraft,
   extendAirTrails,
 } from '@/lib/flightLayer'
 import {
@@ -52,10 +50,8 @@ import {
   type HubMarker,
   createCorridorPolylines,
   createHubMarkers,
-  drawCorridorsOnGlobe,
   highlightCorridor,
   paintHub,
-  pickCorridorAt,
 } from '@/lib/airspaceLayer'
 import { type GlobeMarker, type GlobeView, createGlobeView } from '@/lib/globeView'
 import { COUNTRIES } from '@/lib/countries'
@@ -677,27 +673,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         }
         const scale = Math.max(0.55, radius / 240)
 
-        // The globe always shows more than one radius query can cover, so
-        // what lands here is the worldwide military feed — which is the one
-        // picture the whole-earth view is actually good for.
-        if (layerRef.current === 'flights') {
-          // Under the traffic, for the same reason the lanes go under the
-          // ships: it is the thing the moving marks are moving along.
-          drawCorridorsOnGlobe(ctx, project, radius,
-            pickedRef.current?.kind === 'corridor' ? pickedRef.current.ref : null)
-          const hours = fetchedRef.current
-            ? (Date.now() - fetchedRef.current) / 3_600_000
-            : 0
-          const sel = pickedRef.current
-          const military = new Set(
-            aircraftRef.current.filter(a => a.military).map(a => a.hex),
-          )
-          drawAirTrails(ctx, place, airTrailsRef.current, military, scale)
-          drawAircraft(ctx, place, aircraftRef.current, scale, hours,
-            sel?.kind === 'plane' ? sel.hex : undefined)
-          return
-        }
-
         if (layerRef.current !== 'shipping') return
         const lane = pickedRef.current?.kind === 'lane' ? pickedRef.current.ref : null
         drawLanesOnGlobe(ctx, project, radius, lane)
@@ -1087,12 +1062,11 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
 
   /** Whichever markers the current layer puts on the globe. */
   function activeMarkers(): Map<string, GlobeMarker> {
-    // The aircraft themselves are canvas, but the hubs are not: they are
-    // standing marks that have to be hoverable and clickable, exactly as the
-    // chokepoints are on the sea.
-    if (layerRef.current === 'flights') {
-      return new Map([...hubRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
-    }
+    // Nothing: the flights layer has no globe. It is only ever reached here
+    // for the moment between the layer changing and the view being forced
+    // back to the flat map, and handing the globe a set of hubs to place in
+    // that gap would flash them across it.
+    if (layerRef.current === 'flights') return new Map()
     return layerRef.current === 'shipping'
       ? new Map([...chokeRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
       : new Map([...markersRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
@@ -1113,6 +1087,18 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     const flights = layer === 'flights'
 
     ;(async () => {
+      // The sky is a flat-map layer only.
+      //
+      // The globe was tried for it and taken out: a sphere showing a quarter
+      // of the world at once cannot be asked for the aircraft over any of it
+      // — the provider's circles do not reach — so it could only ever carry
+      // the worldwide military feed, which is forty marks scattered over a
+      // turning planet. Against the shipping layer, where lanes and vessels
+      // wrap the globe and reward turning it, it read as the same control
+      // doing a visibly poorer job. The news and shipping layers keep it.
+      if (flights && viewRef.current === 'globe') await switchTo('map')
+      if (cancelled) return
+
       if (shipping) await ensureShipping(map)
       if (flights) ensureFlights(map)
       if (cancelled) return
@@ -1364,33 +1350,13 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         ref={globeStage}
         onClick={e => {
           if (viewRef.current !== 'globe') return
-          if (layerRef.current !== 'shipping' && layerRef.current !== 'flights') return
+          if (layerRef.current !== 'shipping') return
           const globe = globeRef.current
           const stage = globeStage.current
           if (!globe || !stage) return
           const box = stage.getBoundingClientRect()
           const x = e.clientX - box.left
           const y = e.clientY - box.top
-
-          // Same screen-space hit test as the ships below, for the same
-          // reason: near the limb, two aircraft a continent apart sit a few
-          // pixels apart.
-          if (layerRef.current === 'flights') {
-            let found: Aircraft | null = null
-            let foundD = 15
-            for (const a of aircraftRef.current) {
-              const p = globe.project(a.lat, a.lon)
-              if (!p.front) continue
-              const d = Math.hypot(p.x - x, p.y - y)
-              if (d < foundD) { foundD = d; found = a }
-            }
-            if (found) { setPicked({ kind: 'plane', hex: found.hex }); return }
-            // Nothing close enough to be an aircraft, so try the corridors
-            // underneath — the same fallback the lanes get at sea.
-            const corridor = pickCorridorAt(x, y, (lat, lon) => globe.project(lat, lon))
-            setPicked(corridor ? { kind: 'corridor', ref: corridor } : null)
-            return
-          }
 
           // Hit-tested in screen space, because on a sphere two ships a long
           // way apart can sit a few pixels apart near the limb.
@@ -1422,7 +1388,11 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           which for the only control that reveals half the feature is the
           whole problem. Lifted clear of the stats strip and of Google's
           attribution logo, which is pinned to the very bottom left and may
-          not be moved or hidden. */}
+          not be moved or hidden.
+
+          Absent on the flights layer, which is flat-map only: a control that
+          offers a view the layer does not have is worse than no control. */}
+      {layer !== 'flights' && (
       <div
         className="view-switch"
         role="group"
@@ -1454,6 +1424,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           <span>Map</span>
         </button>
       </div>
+      )}
 
       {/* ── FLEET NOTE ──
           Says what the ships on screen are, which matters because they are a
