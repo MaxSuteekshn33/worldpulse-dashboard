@@ -13,6 +13,21 @@ import type { ChokepointReading } from '@/lib/shipping'
 import type { Vessel } from '@/lib/vessels'
 import { type Trails, createVesselOverlay, drawTrails, drawVessels, extendTrails } from '@/lib/vesselLayer'
 import {
+  FLIGHT_REVALIDATE,
+  type Aircraft,
+  type Scope,
+  quantizeScope,
+  scopeKey,
+  scopeQuery,
+} from '@/lib/flights'
+import {
+  type AirTrails,
+  createFlightOverlay,
+  drawAirTrails,
+  drawAircraft,
+  extendAirTrails,
+} from '@/lib/flightLayer'
+import {
   type ChokeMarker,
   type LanePolyline,
   type LaneRef,
@@ -26,7 +41,8 @@ import {
 import { LANES } from '@/lib/lanes'
 import { describeLane } from '@/lib/laneInfo'
 import { ChokepointDetail, LaneDetail, ShipDetail } from '@/components/SeaDetail'
-import { type GlobeView, createGlobeView } from '@/lib/globeView'
+import { AircraftDetail } from '@/components/SkyDetail'
+import { type GlobeMarker, type GlobeView, createGlobeView } from '@/lib/globeView'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS, type Segment } from '@/lib/segments'
 // Type-only: erased at compile time, so the news pipeline never reaches the client bundle.
@@ -253,14 +269,27 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   const shippingRef = useRef(false)
   const vesselsRef = useRef<Vessel[]>([])
   const vesselOverlayRef = useRef<(google.maps.OverlayView & { redraw: () => void }) | null>(null)
+  // The flights layer, built the first time it is asked for and kept after.
+  const flightsRef = useRef(false)
+  const aircraftRef = useRef<Aircraft[]>([])
+  const flightOverlayRef = useRef<(google.maps.OverlayView & { redraw: () => void }) | null>(null)
+  const airTrailsRef = useRef<AirTrails>(new Map())
+  const fetchedRef = useRef(0)
+  // Which quantized circle was last asked for, so panning inside it is free.
+  const scopeRef = useRef<string>('')
   // Only the summary is state: it changes once a capture, not once a ship.
   const [fleet, setFleet] = useState<{ count: number; configured: boolean } | null>(null)
   const [vessels, setVessels] = useState<Vessel[]>([])
+  const [aircraft, setAircraft] = useState<Aircraft[]>([])
+  const [sky, setSky] = useState<
+    { count: number; military: number; militaryOnly: boolean; unavailable: boolean } | null
+  >(null)
   const [readings, setReadings] = useState<Map<string, ChokepointReading>>(new Map())
   const [picked, setPicked] = useState<
     | { kind: 'choke'; id: string }
     | { kind: 'ship'; mmsi: number }
     | { kind: 'lane'; ref: LaneRef }
+    | { kind: 'plane'; hex: string }
     | null
   >(null)
   const trailsRef = useRef<Trails>(new Map())
@@ -584,14 +613,32 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       // Read through the ref rather than captured, so switching layers does
       // not mean rebuilding the globe.
       drawOverlay: (ctx, project, radius) => {
-        if (layerRef.current !== 'shipping') return
-        const lane = pickedRef.current?.kind === 'lane' ? pickedRef.current.ref : null
-        drawLanesOnGlobe(ctx, project, radius, lane)
         const place = (lat: number, lon: number) => {
           const p = project(lat, lon)
           return p.front ? p : null
         }
         const scale = Math.max(0.55, radius / 240)
+
+        // The globe always shows more than one radius query can cover, so
+        // what lands here is the worldwide military feed — which is the one
+        // picture the whole-earth view is actually good for.
+        if (layerRef.current === 'flights') {
+          const hours = fetchedRef.current
+            ? (Date.now() - fetchedRef.current) / 3_600_000
+            : 0
+          const sel = pickedRef.current
+          const military = new Set(
+            aircraftRef.current.filter(a => a.military).map(a => a.hex),
+          )
+          drawAirTrails(ctx, place, airTrailsRef.current, military, scale)
+          drawAircraft(ctx, place, aircraftRef.current, scale, hours,
+            sel?.kind === 'plane' ? sel.hex : undefined)
+          return
+        }
+
+        if (layerRef.current !== 'shipping') return
+        const lane = pickedRef.current?.kind === 'lane' ? pickedRef.current.ref : null
+        drawLanesOnGlobe(ctx, project, radius, lane)
         const hours = capturedRef.current
           ? (Date.now() - capturedRef.current) / 3_600_000
           : 0
@@ -734,8 +781,77 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     }
   }
 
+  /** The aircraft closest to a point, within a tolerance in degrees. */
+  function nearestAircraft(lat: number, lon: number, within: number): Aircraft | null {
+    let best: Aircraft | null = null
+    let bestD = within
+    for (const a of aircraftRef.current) {
+      const d = Math.hypot(a.lat - lat, (a.lon - lon) * Math.cos((lat * Math.PI) / 180))
+      if (d < bestD) { bestD = d; best = a }
+    }
+    return best
+  }
+
+  /**
+   * What to ask the flights API for, given what is currently on screen.
+   *
+   * The globe shows the whole world and the flat map zoomed out shows more
+   * than the provider's 250 mile radius cap allows, so both resolve to the
+   * worldwide military feed; a flat map zoomed in resolves to a circle around
+   * what is visible. `quantizeScope` then rounds that circle onto a coarse
+   * grid, which is what makes panning cheap: drag inside one cell and the URL
+   * does not change, so nothing is re-fetched.
+   */
+  function flightScope(): Scope {
+    const map = mapRef.current
+    if (viewRef.current === 'globe' || !map) return { kind: 'mil' }
+    const bounds = map.getBounds()
+    if (!bounds) return { kind: 'mil' }
+    const centre = bounds.getCenter()
+    const ne = bounds.getNorthEast()
+    // Corner to centre, so the circle covers the corners of the viewport
+    // rather than inscribing it and leaving the edges empty.
+    const radius = milesBetween(centre.lat(), centre.lng(), ne.lat(), ne.lng())
+    return quantizeScope(centre.lat(), centre.lng(), radius)
+  }
+
+  /**
+   * Builds the flights layer once: the canvas overlay and the click handling.
+   *
+   * Far less to build than the shipping layer — there are no polylines and no
+   * persistent markers, because every mark on this layer is replaced on the
+   * next fetch.
+   */
+  function ensureFlights(map: google.maps.Map) {
+    if (flightsRef.current) return
+    flightsRef.current = true
+
+    flightOverlayRef.current = createFlightOverlay(
+      map,
+      () => aircraftRef.current,
+      () => ({
+        // Checked on every draw rather than by detaching the overlay, so
+        // switching layers cannot leave aircraft painted over the news map.
+        active: layerRef.current === 'flights',
+        hours: fetchedRef.current ? (Date.now() - fetchedRef.current) / 3_600_000 : 0,
+        trails: airTrailsRef.current,
+        selected: pickedRef.current?.kind === 'plane' ? pickedRef.current.hex : undefined,
+      }),
+    )
+
+    map.addListener('click', (e: google.maps.MapMouseEvent) => {
+      if (layerRef.current !== 'flights' || !e.latLng) return
+      const perDeg = (256 * Math.pow(2, map.getZoom() ?? 3)) / 360
+      const found = nearestAircraft(e.latLng.lat(), e.latLng.lng(), 14 / perDeg)
+      setPicked(found ? { kind: 'plane', hex: found.hex } : null)
+    })
+  }
+
   /** Whichever markers the current layer puts on the globe. */
-  function activeMarkers() {
+  function activeMarkers(): Map<string, GlobeMarker> {
+    // The sky is entirely canvas: no persistent nodes to place, and the
+    // country bubbles belong to the news layer.
+    if (layerRef.current === 'flights') return new Map()
     return layerRef.current === 'shipping'
       ? new Map([...chokeRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
       : new Map([...markersRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
@@ -745,24 +861,29 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   // is React state, because two hundred bubbles and a hundred and sixty
   // polylines are not worth a render each.
   useEffect(() => {
+    const previous = layerRef.current
     layerRef.current = layer
     const map = mapRef.current
     if (!map) return
 
     let cancelled = false
+    const news = layer === 'news'
     const shipping = layer === 'shipping'
+    const flights = layer === 'flights'
 
     ;(async () => {
       if (shipping) await ensureShipping(map)
+      if (flights) ensureFlights(map)
       if (cancelled) return
 
-      // A chokepoint picked on the shipping layer means nothing on the news
-      // one. Cleared here, after the await, rather than from an effect of its
-      // own, where it would cascade a render on every layer change.
-      if (!shipping) setPicked(null)
+      // A pick on one layer means nothing on another — a chokepoint on the
+      // news map, a ship in the sky. Cleared on a real layer change only, and
+      // after the await rather than from an effect of its own, where it would
+      // cascade a render every time.
+      if (previous !== layer) setPicked(null)
 
       for (const m of markersRef.current.values()) {
-        m.box.style.display = shipping ? 'none' : ''
+        m.box.style.display = news ? '' : 'none'
       }
       for (const m of chokeRef.current.values()) {
         m.box.style.display = shipping ? '' : 'none'
@@ -771,6 +892,10 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         l.line.setMap(shipping ? map : null)
         l.hit.setMap(shipping ? map : null)
       }
+
+      // The sky canvas empties itself once it knows the layer changed; without
+      // this it would wait for the next pan to notice.
+      flightOverlayRef.current?.redraw()
 
       globeRef.current?.setMarkers(activeMarkers())
       globeRef.current?.refresh()
@@ -816,6 +941,87 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     }, 500)
     return () => { cancelled = true; window.clearInterval(timer); window.clearInterval(motion) }
   }, [layer])
+
+  /**
+   * Keeps the sky current while the flights layer is open.
+   *
+   * Three things drive a fetch: the clock, a pan that leaves the quantized
+   * cell, and a switch between the globe and the flat map — because the globe
+   * is always the worldwide military feed and the flat map usually isn't.
+   * Panning inside one cell drives nothing, which is the whole reason the
+   * scope is quantized at all.
+   */
+  useEffect(() => {
+    if (layer !== 'flights') return
+    let cancelled = false
+
+    const pull = async () => {
+      const scope = flightScope()
+      const key = scopeKey(scope)
+      try {
+        const res = await fetch(`/api/flights?${scopeQuery(scope)}`)
+        const data = await res.json()
+        if (cancelled) return
+
+        if (data.unavailable) {
+          // A donated feed under load is allowed to refuse. Keep the last
+          // known sky on screen and say so, rather than blanking the map in a
+          // way that reads as "nothing is flying".
+          setSky({
+            count: aircraftRef.current.length,
+            military: aircraftRef.current.filter(a => a.military).length,
+            militaryOnly: data.military === true,
+            unavailable: true,
+          })
+          return
+        }
+
+        scopeRef.current = key
+        const next: Aircraft[] = data.aircraft ?? []
+        aircraftRef.current = next
+        airTrailsRef.current = extendAirTrails(airTrailsRef.current, next)
+        fetchedRef.current = Date.parse(data.fetchedAt ?? '') || Date.now()
+        setAircraft(next)
+        setSky({
+          count: next.length,
+          military: next.filter(a => a.military).length,
+          militaryOnly: data.military === true,
+          unavailable: false,
+        })
+        flightOverlayRef.current?.redraw()
+        globeRef.current?.refresh()
+      } catch {
+        if (!cancelled) {
+          setSky(s => ({
+            count: s?.count ?? 0,
+            military: s?.military ?? 0,
+            militaryOnly: s?.militaryOnly ?? true,
+            unavailable: true,
+          }))
+        }
+      }
+    }
+
+    pull()
+    const timer = window.setInterval(pull, FLIGHT_REVALIDATE * 1000)
+    const idle = mapRef.current?.addListener('idle', () => {
+      if (viewRef.current !== 'map') return
+      if (scopeKey(flightScope()) !== scopeRef.current) pull()
+    })
+    // The globe redraws on its own clock; the flat map only redraws when the
+    // map itself changes, so without this the sky would sit still between
+    // fetches however carefully it was being carried forward.
+    const motion = window.setInterval(() => {
+      if (viewRef.current === 'map') flightOverlayRef.current?.redraw()
+    }, 500)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      window.clearInterval(motion)
+      idle?.remove()
+    }
+  }, [layer, view])
 
   /**
    * Swaps the two views.
@@ -877,13 +1083,31 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       <div
         ref={globeStage}
         onClick={e => {
-          if (layerRef.current !== 'shipping' || viewRef.current !== 'globe') return
+          if (viewRef.current !== 'globe') return
+          if (layerRef.current !== 'shipping' && layerRef.current !== 'flights') return
           const globe = globeRef.current
           const stage = globeStage.current
           if (!globe || !stage) return
           const box = stage.getBoundingClientRect()
           const x = e.clientX - box.left
           const y = e.clientY - box.top
+
+          // Same screen-space hit test as the ships below, for the same
+          // reason: near the limb, two aircraft a continent apart sit a few
+          // pixels apart.
+          if (layerRef.current === 'flights') {
+            let found: Aircraft | null = null
+            let foundD = 15
+            for (const a of aircraftRef.current) {
+              const p = globe.project(a.lat, a.lon)
+              if (!p.front) continue
+              const d = Math.hypot(p.x - x, p.y - y)
+              if (d < foundD) { foundD = d; found = a }
+            }
+            setPicked(found ? { kind: 'plane', hex: found.hex } : null)
+            return
+          }
+
           // Hit-tested in screen space, because on a sphere two ships a long
           // way apart can sit a few pixels apart near the limb.
           let best: Vessel | null = null
@@ -970,6 +1194,52 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         </div>
       )}
 
+      {/* ── SKY NOTE ──
+          Carries the one caveat this layer cannot do without: past the
+          provider's radius cap it is showing military traffic only, and a
+          count of "12 aircraft" over the Pacific would otherwise read as an
+          empty sky rather than as a narrowed question. */}
+      {layer === 'flights' && sky && (
+        <div
+          className="mono-label"
+          style={{
+            position: 'absolute', zIndex: 210,
+            top: '18px', right: '18px',
+            padding: '8px 13px', borderRadius: '10px',
+            border: '1px solid var(--border-mid)',
+            background: 'rgba(8,8,12,.84)',
+            backdropFilter: 'blur(14px)',
+            color: sky.unavailable ? 'var(--text-4)' : 'var(--text-3)',
+          }}
+        >
+          {sky.unavailable
+            ? 'Aircraft feed unavailable — showing last known'
+            : sky.militaryOnly
+              ? `${sky.military} military aircraft · worldwide${
+                  view === 'map' ? ' · zoom in for all traffic' : ''
+                }`
+              : `${sky.count} aircraft · ${sky.military} military`}
+        </div>
+      )}
+
+      {/* ── WHICH AIRCRAFT YOU CLICKED ── */}
+      {layer === 'flights' && picked?.kind === 'plane' && (() => {
+        const found = aircraft.find(a => a.hex === picked.hex)
+        if (!found) return null
+        // Nearest country rather than nearest chokepoint: the sea layer's
+        // anchor is a strait, and the sky's is simply where on earth this is.
+        let nearest: { name: string; miles: number } | null = null
+        for (const c of COUNTRIES) {
+          const miles = milesBetween(found.lat, found.lon, c.lat, c.lng)
+          if (!nearest || miles < nearest.miles) nearest = { name: c.name, miles }
+        }
+        return (
+          <div style={{ position: 'absolute', zIndex: 220, right: '18px', top: '64px' }}>
+            <AircraftDetail aircraft={found} nearest={nearest} onClose={() => setPicked(null)} />
+          </div>
+        )
+      })()}
+
       {/* ── WHAT YOU CLICKED ── */}
       {layer === 'shipping' && picked && (
         <div style={{
@@ -1001,7 +1271,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
                 onClose={() => setPicked(null)}
               />
             )
-          })() : (() => {
+          })() : picked.kind === 'ship' ? (() => {
             const vessel = vessels.find(v => v.mmsi === picked.mmsi)
             if (!vessel) return null
             let nearest: { name: string; miles: number } | null = null
@@ -1010,7 +1280,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
               if (!nearest || miles < nearest.miles) nearest = { name: c.name, miles }
             }
             return <ShipDetail vessel={vessel} nearest={nearest} onClose={() => setPicked(null)} />
-          })()}
+          })() : null}
         </div>
       )}
 

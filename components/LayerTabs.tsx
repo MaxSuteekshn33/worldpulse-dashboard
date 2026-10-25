@@ -1,5 +1,5 @@
 'use client'
-import { Newspaper, Ship } from 'lucide-react'
+import { Newspaper, Plane, Ship } from 'lucide-react'
 
 /**
  * What the map is showing.
@@ -10,11 +10,12 @@ import { Newspaper, Ship } from 'lucide-react'
  * rather than separate pages — and switching keeps the camera, the
  * projection, and the view you had chosen.
  */
-export type Layer = 'news' | 'shipping'
+export type Layer = 'news' | 'shipping' | 'flights'
 
 const TABS: { id: Layer; label: string; hint: string; Icon: typeof Ship }[] = [
   { id: 'news', label: 'News', hint: 'What every country is reporting', Icon: Newspaper },
   { id: 'shipping', label: 'Shipping', hint: 'Lanes and chokepoint traffic', Icon: Ship },
+  { id: 'flights', label: 'Flights', hint: 'Live aircraft, military highlighted', Icon: Plane },
 ]
 
 export default function LayerTabs({

@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import CountryPanel from '@/components/CountryPanel'
 import LayerTabs, { type Layer } from '@/components/LayerTabs'
 import ShippingLegend from '@/components/ShippingLegend'
+import FlightLegend from '@/components/FlightLegend'
 import CountUp from '@/components/CountUp'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
@@ -141,15 +142,17 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* Legend — the shipping layer brings its own, because the news
-            colours describe nothing on it. */}
-        {layer === 'shipping' && (
+        {/* Legend — every layer but the news one brings its own, because the
+            news colours describe nothing on them. */}
+        {layer !== 'news' && (
           <div style={{
             marginLeft: isCompact ? 0 : 'auto',
             paddingLeft: isCompact ? 0 : '20px',
             borderLeft: isCompact ? 'none' : '1px solid var(--border)',
           }}>
-            <ShippingLegend compact={isCompact} />
+            {layer === 'shipping'
+              ? <ShippingLegend compact={isCompact} />
+              : <FlightLegend compact={isCompact} />}
           </div>
         )}
 
