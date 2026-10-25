@@ -28,23 +28,17 @@ import { CHOKEPOINTS } from '@/lib/chokepoints'
 const ENDPOINT = 'wss://stream.aisstream.io/v0/stream'
 
 /**
- * The chokepoints worth watching.
+ * The chokepoints worth watching: all of them.
  *
- * Not all 28: every extra box widens the firehose, and a dashboard about the
- * news wants the straits that turn up in it. These are the ones whose traffic
- * is a story when it changes.
+ * It was nine, on the reasoning that every extra box widens the firehose and
+ * a news dashboard wants the straits that turn up in the news. Measured, the
+ * firehose barely widens — at a fixed window, twenty-eight boxes returned 54
+ * vessels against the nine boxes' 38 to 52, because the limit is how fast the
+ * stream sends rather than how much is subscribed to. What twenty-eight does
+ * buy is coverage: ships off Lombok, Magellan and the Yucatan, instead of a
+ * map with nine populated spots and empty ocean everywhere else.
  */
-const WATCHED = new Set([
-  'chokepoint1',  // Suez Canal
-  'chokepoint2',  // Panama Canal
-  'chokepoint3',  // Bosporus
-  'chokepoint4',  // Bab el-Mandeb
-  'chokepoint5',  // Malacca
-  'chokepoint6',  // Hormuz
-  'chokepoint8',  // Gibraltar
-  'chokepoint9',  // Dover
-  'chokepoint11', // Taiwan
-])
+const WATCHED = new Set(CHOKEPOINTS.map(c => c.id))
 
 /**
  * Half-width of each watch box, in degrees.
@@ -61,9 +55,37 @@ const WATCHED = new Set([
  */
 const BOX = 4.0
 
-/** How long to listen. Long enough to fill a busy strait, short enough to sit
- *  inside a serverless invocation with room to spare. */
-export const CAPTURE_MS = 7000
+/**
+ * How long to listen.
+ *
+ * Yield is close to linear in this: measured over the same boxes, 7 seconds
+ * returned 52 vessels, 14 returned 86 and 22 returned 144. The obvious move
+ * is therefore to listen for much longer, and the reason not to is that the
+ * capture blocks the request — whoever asks first waits out the whole window
+ * staring at an empty sea.
+ *
+ * So the window stays short and `VESSEL_MEMORY` does the work instead: ten
+ * seconds is a modest wait for the first visitor, and successive captures
+ * accumulate rather than replacing each other.
+ */
+export const CAPTURE_MS = 10000
+
+/**
+ * How long a vessel stays on the map after it was last heard, in seconds.
+ *
+ * The capture is a few seconds of listening, so one on its own shows the
+ * ships that happened to transmit in that window — a few dozen, scattered.
+ * Four minutes of them, merged by MMSI, is several times that and is a much
+ * fairer picture of what is actually at sea, because a ship that reported
+ * three minutes ago has not gone anywhere: at 15 knots it has moved three
+ * quarters of a mile, and it is carried forward along its own course anyway.
+ *
+ * Four minutes rather than longer because the error grows with the gap and
+ * because a ship really can stop reporting — out of range, or transponder
+ * off, which off Hormuz is itself the story. Past this it is dropped rather
+ * than drawn somewhere it may no longer be.
+ */
+export const VESSEL_MEMORY = 240
 
 /**
  * How close to a chokepoint a vessel has to be to count while stopped.
@@ -95,6 +117,15 @@ export function worthDrawing(v: Vessel, points: { lat: number; lon: number }[]):
 export interface Vessel {
   mmsi: number
   name: string
+  /**
+   * When this fix was heard, as epoch milliseconds.
+   *
+   * Per vessel rather than one timestamp for the whole answer, because the
+   * answer is no longer one capture: it is up to four minutes of them, and
+   * carrying a ship heard three minutes ago forward by the age of the newest
+   * capture would leave it a mile behind where it should be drawn.
+   */
+  seenAt: number
   lat: number
   lon: number
   /** Course over ground, degrees clockwise from north. */
@@ -253,6 +284,8 @@ export function readPositionReport(raw: RawMessage): Vessel | null {
   return {
     mmsi,
     name: (meta.ShipName ?? '').trim() || 'Unknown vessel',
+    // Replaced by the capture with the moment it was actually heard.
+    seenAt: 0,
     lat: Math.round(lat * 10000) / 10000,
     lon: Math.round(lon * 10000) / 10000,
     course: typeof cog === 'number' && cog >= 0 && cog < 360 ? Math.round(cog) : -1,
@@ -330,7 +363,11 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
         const vessel = readPositionReport(frame)
         // Last position wins: a vessel reporting twice in the window has
         // moved, and the newer fix is the one to draw.
-        if (vessel) { seen.set(vessel.mmsi, vessel); return }
+        // Stamped here rather than in the parser, which stays pure: the
+        // feed's own `time_utc` is a Go-formatted string that `Date.parse`
+        // does not reliably read, and within a ten-second window the
+        // difference does not matter.
+        if (vessel) { seen.set(vessel.mmsi, { ...vessel, seenAt: Date.now() }); return }
         const stat = readShipStatic(frame)
         if (stat) { facts.set(stat.mmsi, stat.facts); remember(stat.mmsi, stat.facts) }
       } catch { /* a frame we cannot read is not a reason to lose the rest */ }
@@ -339,4 +376,29 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
     socket.onerror = finish
     socket.onclose = finish
   })
+}
+
+/**
+ * Folds a fresh capture into what is already known, dropping what has gone
+ * stale.
+ *
+ * Newest fix per MMSI wins, so a ship heard again this capture moves rather
+ * than appearing twice. Everything last heard more than `VESSEL_MEMORY` ago
+ * is let go — this is the only thing keeping the pool from growing all day
+ * and the map from filling with ships that stopped reporting hours earlier.
+ */
+export function mergeCaptures(
+  held: Vessel[],
+  fresh: Vessel[],
+  now = Date.now(),
+): Vessel[] {
+  const pool = new Map<number, Vessel>()
+  for (const v of held) pool.set(v.mmsi, v)
+  for (const v of fresh) {
+    const prior = pool.get(v.mmsi)
+    if (!prior || v.seenAt >= prior.seenAt) pool.set(v.mmsi, v)
+  }
+
+  const cutoff = now - VESSEL_MEMORY * 1000
+  return [...pool.values()].filter(v => v.seenAt >= cutoff)
 }

@@ -1,18 +1,33 @@
 import { NextResponse } from 'next/server'
-import { CAPTURE_MS, VESSEL_REVALIDATE, type Vessel, captureVessels, watchBoxes } from '@/lib/vessels'
+import {
+  CAPTURE_MS,
+  VESSEL_MEMORY,
+  VESSEL_REVALIDATE,
+  type Vessel,
+  captureVessels,
+  mergeCaptures,
+  watchBoxes,
+} from '@/lib/vessels'
 
 /** A socket is not an edge thing, and neither is this. */
 export const runtime = 'nodejs'
 /** Room for the capture plus the handshake, and no more. */
-export const maxDuration = 20
+export const maxDuration = 25
 
 /**
- * Ships around the watched chokepoints, as of the last capture.
+ * Ships around the watched chokepoints, over the last few minutes.
  *
- * Held briefly in the instance that took it so a burst of visitors shares one
- * listen rather than opening a socket each — AISStream allows three
- * connections per account, and the answer is the same for everyone anyway.
- * The CDN header does the rest.
+ * Held in the instance that took it so a burst of visitors shares one listen
+ * rather than opening a socket each — AISStream allows three connections per
+ * account, and the answer is the same for everyone anyway. The CDN header
+ * does the rest.
+ *
+ * It accumulates rather than replacing. A single capture is a few seconds of
+ * listening and returns whatever happened to transmit in that window — a few
+ * dozen ships, scattered. Merging successive captures and letting each ship
+ * go `VESSEL_MEMORY` after it was last heard gives several times as many for
+ * the same listening, because the cost of a capture is the waiting, and that
+ * has already been paid.
  */
 let cached: { at: number; vessels: Vessel[] } | null = null
 let inFlight: Promise<Vessel[]> | null = null
@@ -39,9 +54,10 @@ export async function GET() {
     // One capture at a time per instance; concurrent requests wait on it
     // rather than each opening their own socket.
     inFlight ??= captureVessels(key).then(vessels => {
-      cached = { at: Date.now(), vessels }
+      const merged = mergeCaptures(cached?.vessels ?? [], vessels)
+      cached = { at: Date.now(), vessels: merged }
       inFlight = null
-      return vessels
+      return merged
     })
     await inFlight
   }
@@ -51,9 +67,11 @@ export async function GET() {
       vessels: cached?.vessels ?? [],
       configured: true,
       capturedAt: new Date(cached?.at ?? Date.now()).toISOString(),
-      // Said so the client can be honest about what it is drawing: a sample
-      // taken over a few seconds, not a continuous feed.
+      // Said so the client can be honest about what it is drawing: ships
+      // heard over the last few minutes, not a continuous feed and not a
+      // census of what is at sea.
       captureMs: CAPTURE_MS,
+      memorySeconds: VESSEL_MEMORY,
       boxes: watchBoxes().length,
     },
     { headers: { 'Cache-Control': `s-maxage=${VESSEL_REVALIDATE}, stale-while-revalidate=30` } },

@@ -104,14 +104,25 @@ export function drawVessels(
   project: (lat: number, lon: number) => { x: number; y: number } | null,
   vessels: Vessel[],
   scale = 1,
-  hours = 0,
+  /**
+   * The current time, as epoch milliseconds.
+   *
+   * It used to be one age for the whole fleet, which was right while the
+   * answer was a single capture and wrong as soon as it became several
+   * minutes of them merged together: a ship heard three minutes ago would
+   * have been carried forward by the age of the newest capture instead of
+   * its own, and drawn most of a mile short. Each vessel now ages from its
+   * own `seenAt`. Zero means "do not carry anything forward".
+   */
+  clock = 0,
   selected?: number,
 ): void {
   const size = HULL_SIZE * scale
 
   for (const v of vessels) {
-    const now = deadReckon(v, hours)
-    const at = project(now.lat, now.lon)
+    const hours = clock && v.seenAt ? Math.max(0, (clock - v.seenAt) / 3_600_000) : 0
+    const moved = deadReckon(v, hours)
+    const at = project(moved.lat, moved.lon)
     if (!at) continue
 
     ctx.globalAlpha = v.speed > 0.5 ? MOVING : IDLE
@@ -175,7 +186,7 @@ export function drawVessels(
 export function createVesselOverlay(
   map: google.maps.Map,
   getVessels: () => Vessel[],
-  getState: () => { active: boolean; hours: number; trails: Trails; selected?: number },
+  getState: () => { active: boolean; clock: number; trails: Trails; selected?: number },
 ): google.maps.OverlayView & { redraw: () => void } {
   const canvas = document.createElement('canvas')
   canvas.style.cssText = 'position:absolute;pointer-events:none'
@@ -237,7 +248,7 @@ export function createVesselOverlay(
     if (!state.active) return
 
     drawTrails(ctx, place, state.trails)
-    drawVessels(ctx, place, getVessels(), 1, state.hours, state.selected)
+    drawVessels(ctx, place, getVessels(), 1, state.clock, state.selected)
   }
 
   overlay.redraw = () => overlay.draw()

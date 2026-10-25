@@ -319,7 +319,9 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   const sampledRef = useRef<Set<string> | null>(null)
   const corridorsRef = useRef<CorridorPolyline[]>([])
   // Only the summary is state: it changes once a capture, not once a ship.
-  const [fleet, setFleet] = useState<{ count: number; configured: boolean } | null>(null)
+  const [fleet, setFleet] = useState<
+    { count: number; configured: boolean; memory: number } | null
+  >(null)
   const [vessels, setVessels] = useState<Vessel[]>([])
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
   const [sky, setSky] = useState<
@@ -346,7 +348,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     | null
   >(null)
   const trailsRef = useRef<Trails>(new Map())
-  const capturedRef = useRef(0)
   // Read inside the draw loops, which must not be rebuilt when it changes —
   // mirrored through a ref rather than captured, and synced after the render
   // rather than during it.
@@ -676,12 +677,9 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         if (layerRef.current !== 'shipping') return
         const lane = pickedRef.current?.kind === 'lane' ? pickedRef.current.ref : null
         drawLanesOnGlobe(ctx, project, radius, lane)
-        const hours = capturedRef.current
-          ? (Date.now() - capturedRef.current) / 3_600_000
-          : 0
         drawTrails(ctx, place, trailsRef.current, scale)
         const sel = pickedRef.current
-        drawVessels(ctx, place, vesselsRef.current, scale, hours,
+        drawVessels(ctx, place, vesselsRef.current, scale, Date.now(),
           sel?.kind === 'ship' ? sel.mmsi : undefined)
       },
     })
@@ -793,7 +791,9 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         // the sky's is, so switching layers cannot leave ships painted over
         // the aircraft.
         active: layerRef.current === 'shipping',
-        hours: capturedRef.current ? (Date.now() - capturedRef.current) / 3_600_000 : 0,
+        // The clock, not an age: each ship is carried forward from its own
+        // last fix, because the fleet is several minutes of captures merged.
+        clock: Date.now(),
         trails: trailsRef.current,
         selected: pickedRef.current?.kind === 'ship' ? pickedRef.current.mmsi : undefined,
       }),
@@ -1157,13 +1157,19 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         if (cancelled) return
         vesselsRef.current = data.vessels ?? []
         trailsRef.current = extendTrails(trailsRef.current, vesselsRef.current)
-        capturedRef.current = Date.parse(data.capturedAt ?? '') || Date.now()
         setVessels(vesselsRef.current)
-        setFleet({ count: vesselsRef.current.length, configured: data.configured !== false })
+        setFleet({
+          count: vesselsRef.current.length,
+          configured: data.configured !== false,
+          // Taken from the answer rather than imported: `lib/vessels` is
+          // server code, and importing a value from it would pull the AIS
+          // parser and the whole chokepoint dataset into the browser bundle.
+          memory: Number(data.memorySeconds) || 0,
+        })
         vesselOverlayRef.current?.redraw()
         globeRef.current?.refresh()
       } catch {
-        if (!cancelled) setFleet({ count: 0, configured: true })
+        if (!cancelled) setFleet({ count: 0, configured: true, memory: 0 })
       }
     }
 
@@ -1427,9 +1433,11 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       )}
 
       {/* ── FLEET NOTE ──
-          Says what the ships on screen are, which matters because they are a
-          few seconds of listening rather than a continuous feed — and says
-          plainly when there is no key rather than showing empty seas. */}
+          Says what the ships on screen are, which matters because they are
+          bursts of listening rather than a continuous feed, and because what
+          is drawn is every ship heard in the last few minutes rather than
+          every ship at sea. Says plainly when there is no key, too, rather
+          than showing empty seas. */}
       {layer === 'shipping' && fleet && (
         <div
           className="mono-label"
@@ -1444,7 +1452,9 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           }}
         >
           {fleet.configured
-            ? `${fleet.count} ships · sampled live`
+            ? fleet.memory
+              ? `${fleet.count} ships · heard in the last ${Math.round(fleet.memory / 60)} min`
+              : `${fleet.count} ships · sampled live`
             : 'Live vessels off — set AISSTREAM_KEY'}
         </div>
       )}
