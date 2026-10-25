@@ -43,7 +43,20 @@ import {
 import { LANES } from '@/lib/lanes'
 import { describeLane } from '@/lib/laneInfo'
 import { ChokepointDetail, LaneDetail, ShipDetail } from '@/components/SeaDetail'
-import { AircraftDetail } from '@/components/SkyDetail'
+import { AircraftDetail, CorridorDetail, HubDetail } from '@/components/SkyDetail'
+import { CORRIDORS, HUBS, HUB_BY_ID } from '@/lib/airways'
+import { type HubReading, readHubs } from '@/lib/airspace'
+import {
+  type CorridorPolyline,
+  type CorridorRef,
+  type HubMarker,
+  createCorridorPolylines,
+  createHubMarkers,
+  drawCorridorsOnGlobe,
+  highlightCorridor,
+  paintHub,
+  pickCorridorAt,
+} from '@/lib/airspaceLayer'
 import { type GlobeMarker, type GlobeView, createGlobeView } from '@/lib/globeView'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS, type Segment } from '@/lib/segments'
@@ -279,6 +292,13 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   const fetchedRef = useRef(0)
   // Which quantized circle was last asked for, so panning inside it is free.
   const scopeRef = useRef<string>('')
+  // The sky's standing geography: the hubs and the corridors between them.
+  // Unlike the aircraft, these exist before any fetch and survive every one.
+  const hubRef = useRef<Map<string, HubMarker>>(new Map())
+  // Whether the sky currently held is the worldwide military feed rather than
+  // everything in the viewport. The hubs cannot be read from the first.
+  const militaryOnlyRef = useRef(true)
+  const corridorsRef = useRef<CorridorPolyline[]>([])
   // Only the summary is state: it changes once a capture, not once a ship.
   const [fleet, setFleet] = useState<{ count: number; configured: boolean } | null>(null)
   const [vessels, setVessels] = useState<Vessel[]>([])
@@ -287,11 +307,16 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     { count: number; military: number; militaryOnly: boolean; unavailable: boolean } | null
   >(null)
   const [readings, setReadings] = useState<Map<string, ChokepointReading>>(new Map())
+  // Worked out from the aircraft already on screen rather than fetched, so
+  // this changes with every pull and every pan, and costs nothing to do.
+  const [hubReadings, setHubReadings] = useState<Map<string, HubReading>>(new Map())
   const [picked, setPicked] = useState<
     | { kind: 'choke'; id: string }
     | { kind: 'ship'; mmsi: number }
     | { kind: 'lane'; ref: LaneRef }
     | { kind: 'plane'; hex: string }
+    | { kind: 'hub'; id: string }
+    | { kind: 'corridor'; ref: CorridorRef }
     | null
   >(null)
   const trailsRef = useRef<Trails>(new Map())
@@ -303,6 +328,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   useEffect(() => {
     pickedRef.current = picked
     highlightLane(lanesRef.current, picked?.kind === 'lane' ? picked.ref : null)
+    highlightCorridor(corridorsRef.current, picked?.kind === 'corridor' ? picked.ref : null)
     globeRef.current?.refresh()
   }, [picked])
   const router = useRouter()
@@ -625,6 +651,10 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         // what lands here is the worldwide military feed — which is the one
         // picture the whole-earth view is actually good for.
         if (layerRef.current === 'flights') {
+          // Under the traffic, for the same reason the lanes go under the
+          // ships: it is the thing the moving marks are moving along.
+          drawCorridorsOnGlobe(ctx, project, radius,
+            pickedRef.current?.kind === 'corridor' ? pickedRef.current.ref : null)
           const hours = fetchedRef.current
             ? (Date.now() - fetchedRef.current) / 3_600_000
             : 0
@@ -667,7 +697,11 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     // Both sets travel together, whichever layer is showing: the one that is
     // hidden is hidden by `display`, and leaving it behind in the other view's
     // container would strand it there the moment the layer changed.
-    const all = [...markersRef.current.values(), ...chokeRef.current.values()]
+    const all = [
+      ...markersRef.current.values(),
+      ...chokeRef.current.values(),
+      ...hubRef.current.values(),
+    ]
     for (const m of all) {
       if (where === 'stage') {
         if (!stage) return
@@ -853,15 +887,43 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   }
 
   /**
-   * Builds the flights layer once: the canvas overlay and the click handling.
+   * Builds the flights layer once: the corridors, the hub markers, the canvas
+   * overlay and the click handling.
    *
-   * Far less to build than the shipping layer — there are no polylines and no
-   * persistent markers, because every mark on this layer is replaced on the
-   * next fetch.
+   * The same shape as `ensureShipping`, and deliberately so. The aircraft are
+   * replaced on every fetch, but the corridors and the hubs are not — they
+   * are what the layer looks like before a single aircraft has arrived, and
+   * what it still looks like at a zoom where no aircraft can be fetched at
+   * all.
    */
   function ensureFlights(map: google.maps.Map) {
     if (flightsRef.current) return
     flightsRef.current = true
+
+    corridorsRef.current = createCorridorPolylines(map, ref => setPicked({ kind: 'corridor', ref }))
+    hubRef.current = createHubMarkers(HUBS, id => setPicked({ kind: 'hub', id }))
+
+    // Positioned by Google while the flat map has them, exactly as the
+    // chokepoints and the country bubbles are.
+    for (const h of HUBS) {
+      const m = hubRef.current.get(h.id)
+      if (!m) continue
+      const overlay = new google.maps.OverlayView()
+      overlay.onAdd = function () {
+        this.getPanes()?.overlayMouseTarget.appendChild(m.box)
+      }
+      overlay.draw = function () {
+        if (viewRef.current === 'globe') return
+        const proj = this.getProjection()
+        if (!proj) return
+        const at = proj.fromLatLngToDivPixel(new google.maps.LatLng(h.lat, h.lon))
+        if (!at) return
+        m.box.style.left = `${at.x - 12}px`
+        m.box.style.top = `${at.y - 12}px`
+      }
+      overlay.onRemove = function () { m.box.parentNode?.removeChild(m.box) }
+      overlay.setMap(map)
+    }
 
     flightOverlayRef.current = createFlightOverlay(
       map,
@@ -884,11 +946,52 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     })
   }
 
+  /**
+   * Re-reads every hub against the sky currently held, and repaints it.
+   *
+   * Called after a fetch and again whenever the map settles, because a hub's
+   * figures depend on the viewport as much as on the traffic: pan Heathrow
+   * half off the edge and half its circle goes with it, which `coverOf`
+   * notices and reports rather than counting what is left as the whole.
+   *
+   * The globe has no viewport to read, so on the globe every hub comes back
+   * uncounted — correct, since the globe only ever holds the military feed.
+   *
+   * So does any zoom wide enough to have fallen back to that feed, and this
+   * is the case worth being careful about: the hub's circle is fully on
+   * screen, so coverage looks complete, but the only aircraft in hand are
+   * military. Counted naively, Frankfurt reported "quiet, 0 in, 0 out" on an
+   * ordinary weekday afternoon — a reading, and a wrong one. Withholding the
+   * viewport withholds the figures, which is the honest answer.
+   */
+  function paintHubs(sky: Aircraft[]) {
+    const readable = viewRef.current === 'map' && !militaryOnlyRef.current
+    const bounds = readable ? mapRef.current?.getBounds() : null
+    const box = bounds
+      ? {
+          north: bounds.getNorthEast().lat(),
+          south: bounds.getSouthWest().lat(),
+          east: bounds.getNorthEast().lng(),
+          west: bounds.getSouthWest().lng(),
+        }
+      : null
+
+    const next = readHubs(HUBS, sky, box)
+    setHubReadings(next)
+    for (const h of HUBS) {
+      const m = hubRef.current.get(h.id)
+      if (m) paintHub(m, next.get(h.id) ?? null, h)
+    }
+  }
+
   /** Whichever markers the current layer puts on the globe. */
   function activeMarkers(): Map<string, GlobeMarker> {
-    // The sky is entirely canvas: no persistent nodes to place, and the
-    // country bubbles belong to the news layer.
-    if (layerRef.current === 'flights') return new Map()
+    // The aircraft themselves are canvas, but the hubs are not: they are
+    // standing marks that have to be hoverable and clickable, exactly as the
+    // chokepoints are on the sea.
+    if (layerRef.current === 'flights') {
+      return new Map([...hubRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
+    }
     return layerRef.current === 'shipping'
       ? new Map([...chokeRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
       : new Map([...markersRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
@@ -928,6 +1031,13 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       for (const l of lanesRef.current) {
         l.line.setMap(shipping ? map : null)
         l.hit.setMap(shipping ? map : null)
+      }
+      for (const m of hubRef.current.values()) {
+        m.box.style.display = flights ? '' : 'none'
+      }
+      for (const c of corridorsRef.current) {
+        c.line.setMap(flights ? map : null)
+        c.hit.setMap(flights ? map : null)
       }
 
       // The sky canvas empties itself once it knows the layer changed; without
@@ -1046,6 +1156,8 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           militaryOnly,
           unavailable: false,
         })
+        militaryOnlyRef.current = militaryOnly
+        paintHubs(next)
         flightOverlayRef.current?.redraw()
         globeRef.current?.refresh()
       } catch {
@@ -1065,6 +1177,9 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     const idle = mapRef.current?.addListener('idle', () => {
       if (viewRef.current !== 'map') return
       if (flightScopes().map(scopeKey).join('+') !== scopeRef.current) pull()
+      // Even when the scope has not changed, which hubs are on screen has —
+      // and that is what decides whether a hub can be counted at all.
+      else paintHubs(aircraftRef.current)
     })
     // The globe redraws on its own clock; the flat map only redraws when the
     // map itself changes, so without this the sky would sit still between
@@ -1162,7 +1277,11 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
               const d = Math.hypot(p.x - x, p.y - y)
               if (d < foundD) { foundD = d; found = a }
             }
-            setPicked(found ? { kind: 'plane', hex: found.hex } : null)
+            if (found) { setPicked({ kind: 'plane', hex: found.hex }); return }
+            // Nothing close enough to be an aircraft, so try the corridors
+            // underneath — the same fallback the lanes get at sea.
+            const corridor = pickCorridorAt(x, y, (lat, lon) => globe.project(lat, lon))
+            setPicked(corridor ? { kind: 'corridor', ref: corridor } : null)
             return
           }
 
@@ -1279,6 +1398,39 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
               : `${sky.count} aircraft · ${sky.military} military`}
         </div>
       )}
+
+      {/* ── WHICH HUB YOU CLICKED ── */}
+      {layer === 'flights' && picked?.kind === 'hub' && (() => {
+        const hub = HUB_BY_ID.get(picked.id)
+        if (!hub) return null
+        return (
+          <div style={{ position: 'absolute', zIndex: 220, right: '18px', top: '64px' }}>
+            <HubDetail
+              hub={hub}
+              reading={hubReadings.get(hub.id) ?? null}
+              onClose={() => setPicked(null)}
+            />
+          </div>
+        )
+      })()}
+
+      {/* ── WHICH CORRIDOR YOU CLICKED ── */}
+      {layer === 'flights' && picked?.kind === 'corridor' && (() => {
+        const corridor = CORRIDORS[picked.ref.index]
+        if (!corridor) return null
+        return (
+          <div style={{ position: 'absolute', zIndex: 220, right: '18px', top: '64px' }}>
+            <CorridorDetail
+              corridor={corridor}
+              hubs={{
+                a: HUB_BY_ID.get(corridor.a) ?? null,
+                b: HUB_BY_ID.get(corridor.b) ?? null,
+              }}
+              onClose={() => setPicked(null)}
+            />
+          </div>
+        )
+      })()}
 
       {/* ── WHICH AIRCRAFT YOU CLICKED ── */}
       {layer === 'flights' && picked?.kind === 'plane' && (() => {

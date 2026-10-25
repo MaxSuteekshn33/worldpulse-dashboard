@@ -653,11 +653,21 @@ button:active, [role="button"]:active { opacity: .85; }
 }
 
 /* ---- Sea detail ----
- * What a chokepoint or a ship says when you click it. The shipping layer was
- * a picture without this: lines and diamonds that answered nothing.
+ * What a chokepoint, a ship, an aircraft, an air hub or a corridor says when
+ * you click it. Either layer was a picture without this: lines and diamonds
+ * that answered nothing.
+ *
+ * The height cap is not decoration. The hub panel carries a list of inbound
+ * aircraft, so it is as tall as the approach is busy — measured running 30px
+ * off the bottom of the window at Paris, taking the sentence that says these
+ * are a snapshot rather than a trend with it. It is capped and scrolled
+ * instead, which also covers the chokepoint panel on a short window.
  */
 .sea-detail {
   width: min(320px, calc(100vw - 32px));
+  max-height: calc(100vh - 92px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px 17px 17px;
   border-radius: 15px;
   border: 1px solid var(--border-mid);

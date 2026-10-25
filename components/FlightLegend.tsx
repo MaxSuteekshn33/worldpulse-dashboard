@@ -1,13 +1,19 @@
 'use client'
 import { CIVIL, MILITARY } from '@/lib/flightLayer'
+import { CORRIDOR_TIERS } from '@/lib/airspaceLayer'
 
 /**
  * What everything on the flights layer means.
  *
- * Two marks and a caveat. The caveat is the part that earns its place: past
- * the provider's 250 mile radius cap the layer is showing military traffic
- * only, and a legend that said "aircraft" at every zoom would be quietly
- * lying about an empty-looking sky over the Pacific.
+ * Four marks and a caveat. Two of them — the corridor and the hub — are the
+ * layer's standing geography and are on screen before any aircraft is, which
+ * is most of why they are in the key at all: a dashboard that drew arcs and
+ * rings and explained neither would be asking the reader to guess.
+ *
+ * The caveat is the part that earns its place: past the provider's 250 mile
+ * radius cap the layer is showing military traffic only, and a legend that
+ * said "aircraft" at every zoom would be quietly lying about an
+ * empty-looking sky over the Pacific.
  */
 function Plane({ color, label }: { color: string; label: string }) {
   return (
@@ -41,9 +47,25 @@ export default function FlightLegend({ compact }: { compact?: boolean }) {
       <Plane color={MILITARY} label="Military" />
       <Plane color={CIVIL} label="Civil" />
 
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
+        {/* A ring, matching the hub markers — hollow, because an airport is a
+            place traffic passes through rather than one more aircraft. */}
+        <svg width="13" height="13" viewBox="-8 -8 16 16" aria-hidden>
+          <circle r="5.2" fill="none" stroke="#6B7389" strokeWidth="1.8" />
+        </svg>
+        <span className="mono-label" style={{ color: 'var(--text-3)' }}>Hub</span>
+      </span>
+
       {!compact && (
         <>
           <span style={{ width: '1px', height: '14px', background: 'var(--border-mid)' }} />
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
+            <span style={{
+              width: '20px', height: '2px', display: 'inline-block',
+              background: CORRIDOR_TIERS[2].color, opacity: CORRIDOR_TIERS[2].opacity,
+            }} />
+            <span className="mono-label" style={{ color: 'var(--text-3)' }}>Corridor</span>
+          </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px' }}>
             <span style={{
               width: '20px', height: '1px', background: CIVIL, opacity: 0.34,

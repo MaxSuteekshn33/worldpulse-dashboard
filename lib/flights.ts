@@ -27,6 +27,20 @@
  * subset that is both small and worth a dashboard's attention: military
  * traffic, worldwide, from the provider's own classification.
  *
+ * The third constraint was not in the spec and is the tightest of the three.
+ * Every response carries it:
+ *
+ *     x-ratelimit-limit: 4, 4;w=1, 60;w=60, 500;w=86400
+ *
+ * Four a second, sixty a minute, **five hundred a day**. Anything that wants
+ * its own request on a timer has to be measured against five hundred before
+ * it is written: a thirty-airport sweep every two minutes is 21,600, which is
+ * forty times the whole day's allowance, and it was built and measured doing
+ * exactly that before being thrown away. `lib/airspace.ts` reads the hubs out
+ * of the aircraft this file already fetched instead, for nothing. Over the
+ * limit the feed answers 429 with an empty body, which is easy to mistake for
+ * an empty sky — so never let a failed fetch become a zero.
+ *
  * The endpoint is ADSBExchange-compatible, so moving to a paid feed later is
  * a change of base URL and a key header, not a rewrite of this file.
  */
