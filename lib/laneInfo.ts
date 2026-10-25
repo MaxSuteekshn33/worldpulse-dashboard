@@ -92,3 +92,71 @@ export function describeLane(tier: LaneRoute['tier'], flat: number[]): LaneRoute
     via,
   }
 }
+
+/**
+ * How far a point lies from a lane, in nautical miles.
+ *
+ * Point-to-segment rather than point-to-vertex: the lanes are stored as a few
+ * dozen widely spaced points, so measuring to the nearest stored point would
+ * put a ship sitting squarely on a leg tens of miles "off" it.
+ */
+function milesToLane(lat: number, lon: number, flat: number[]): number {
+  let best = Infinity
+  for (let i = 2; i < flat.length; i += 2) {
+    const ax = flat[i - 2], ay = flat[i - 1]
+    const bx = flat[i], by = flat[i + 1]
+    // Longitude is squeezed by latitude before any of this, so the distance
+    // is in comparable units north-south and east-west.
+    const k = Math.cos((((ay + by) / 2) * Math.PI) / 180)
+    const px = (lon - ax) * k, py = lat - ay
+    const dx = (bx - ax) * k, dy = by - ay
+    const len = dx * dx + dy * dy
+    const t = len === 0 ? 0 : Math.max(0, Math.min(1, (px * dx + py * dy) / len))
+    const d = Math.hypot(px - t * dx, py - t * dy) * 60
+    if (d < best) best = d
+  }
+  return best
+}
+
+/** How close a ship has to be to count as being on the lane. */
+export const ON_LANE_NM = 45
+
+export interface LaneTraffic {
+  /** Tracked ships within `ON_LANE_NM` of the lane. */
+  count: number
+  /** Of those, how many are making way. */
+  moving: number
+  /** Median speed of the ones making way, knots. */
+  medianSpeed: number | null
+  /** The largest few by length, for a sense of what uses it. */
+  notable: { name: string; kind?: string; length?: number; speed: number }[]
+}
+
+/**
+ * Which of the ships currently tracked are on this lane.
+ *
+ * Worth being clear about what this is not: it is not how busy the lane is.
+ * The fleet is whatever AIS happened to be heard from around the chokepoints
+ * in the last quarter of an hour, so a lane crossing an unwatched ocean shows
+ * nothing however many ships are on it. It answers "of the ships I can
+ * currently see, which are on this route", and the panel says so.
+ */
+export function laneTraffic(
+  flat: number[],
+  vessels: { name: string; lat: number; lon: number; speed: number; kind?: string; length?: number }[],
+): LaneTraffic {
+  const on = vessels.filter(v => milesToLane(v.lat, v.lon, flat) <= ON_LANE_NM)
+  const making = on.filter(v => v.speed > 0.5)
+
+  const speeds = making.map(v => v.speed).sort((a, b) => a - b)
+  const medianSpeed = speeds.length
+    ? Math.round(speeds[Math.floor(speeds.length / 2)] * 10) / 10
+    : null
+
+  const notable = [...on]
+    .sort((a, b) => (b.length ?? 0) - (a.length ?? 0))
+    .slice(0, 4)
+    .map(v => ({ name: v.name, kind: v.kind, length: v.length, speed: v.speed }))
+
+  return { count: on.length, moving: making.length, medianSpeed, notable }
+}

@@ -39,6 +39,7 @@ import {
   pickLaneAt,
 } from '@/lib/shippingLayer'
 import { LANES } from '@/lib/lanes'
+import { laneTraffic } from '@/lib/laneInfo'
 import { describeLane } from '@/lib/laneInfo'
 import { ChokepointDetail, LaneDetail, ShipDetail } from '@/components/SeaDetail'
 import { AircraftDetail, CorridorDetail, HubDetail } from '@/components/SkyDetail'
@@ -348,6 +349,9 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     | null
   >(null)
   const trailsRef = useRef<Trails>(new Map())
+  // How long the server keeps a ship after hearing it. Comes from the answer
+  // rather than from an import, because `lib/vessels` is server code.
+  const memoryRef = useRef(0)
   // Read inside the draw loops, which must not be rebuilt when it changes —
   // mirrored through a ref rather than captured, and synced after the render
   // rather than during it.
@@ -679,7 +683,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         drawLanesOnGlobe(ctx, project, radius, lane)
         drawTrails(ctx, place, trailsRef.current, scale)
         const sel = pickedRef.current
-        drawVessels(ctx, place, vesselsRef.current, scale, Date.now(),
+        drawVessels(ctx, place, vesselsRef.current, scale, Date.now(), memoryRef.current,
           sel?.kind === 'ship' ? sel.mmsi : undefined)
       },
     })
@@ -794,6 +798,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         // The clock, not an age: each ship is carried forward from its own
         // last fix, because the fleet is several minutes of captures merged.
         clock: Date.now(),
+        memory: memoryRef.current,
         trails: trailsRef.current,
         selected: pickedRef.current?.kind === 'ship' ? pickedRef.current.mmsi : undefined,
       }),
@@ -1156,6 +1161,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         const data = await res.json()
         if (cancelled) return
         vesselsRef.current = data.vessels ?? []
+        memoryRef.current = Number(data.memorySeconds) || 0
         trailsRef.current = extendTrails(trailsRef.current, vesselsRef.current)
         setVessels(vesselsRef.current)
         setFleet({
@@ -1164,7 +1170,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           // Taken from the answer rather than imported: `lib/vessels` is
           // server code, and importing a value from it would pull the AIS
           // parser and the whole chokepoint dataset into the browser bundle.
-          memory: Number(data.memorySeconds) || 0,
+          memory: memoryRef.current,
         })
         vesselOverlayRef.current?.redraw()
         globeRef.current?.refresh()
@@ -1571,6 +1577,10 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
             return (
               <LaneDetail
                 route={describeLane(picked.ref.tier, flat)}
+                // Worked out here from the fleet already in hand, so a lane
+                // answers "which of the ships I can see are on you" without
+                // a request of its own.
+                traffic={laneTraffic(flat, vessels)}
                 onClose={() => setPicked(null)}
               />
             )

@@ -72,7 +72,10 @@ export default function ShippingLegend({ compact }: { compact?: boolean }) {
       {!compact && <Dot color="#4EA3C2" label="Above" />}
 
       <span style={{ width: '1px', height: '14px', background: 'var(--border-mid)' }} />
-      <Dot color="#CFE6F2" shape="ship" label="Ship, live" />
+      {/* "Recently heard" rather than "live": these are the ships AIS was
+          heard from in the last quarter of an hour, carried forward on their
+          own course since, and the fainter ones are the older fixes. */}
+      <Dot color="#CFE6F2" shape="ship" label="Ship, recently heard" />
     </div>
   )
 }

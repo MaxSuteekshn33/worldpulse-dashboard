@@ -87,7 +87,30 @@ const HULL = '#CFE6F2'
 const MOVING = 0.95
 const IDLE = 0.45
 /** Base hull length in pixels, before the view's own scale. */
-const HULL_SIZE = 5.4
+/**
+ * Hull size at full scale, in pixels.
+ *
+ * Bigger than the old five, because at five pixels an arrowhead among
+ * chokepoint markers and lane strokes reads as a speck rather than a ship.
+ * But a single size for every zoom does not work now that the fleet is four
+ * times what it was: drawn this large over the whole world, the North Sea
+ * and the Singapore Strait turn into white blobs with no arrowheads visible
+ * in them at all. `zoomScale` keeps the drawn size tied to how much sea is
+ * on screen, so they are small enough to stay separate when the view is the
+ * whole planet and large enough to read when it is one strait.
+ */
+const HULL_SIZE = 7.2
+
+/**
+ * How much of the full hull size to draw at a given Google zoom level.
+ *
+ * Zoom 3 is roughly the whole world and zoom 7 is a sea; between those the
+ * ships grow from about half size to full. Clamped at both ends so a world
+ * view never disappears and a harbour view never fills with giants.
+ */
+export function zoomScale(zoom: number): number {
+  return Math.max(0.55, Math.min(1.15, 0.45 + (zoom - 2) * 0.16))
+}
 /** How far the hull's light carries. Scaled with the hull so the glow does
  *  not swamp it on the globe, where everything is drawn smaller. */
 const GLOW = 7
@@ -99,6 +122,25 @@ const GLOW = 7
  * globe, or off the edge of the map — which keeps the two callers from having
  * to agree on anything beyond that.
  */
+/**
+ * How solid a ship should look, given how long ago it was heard.
+ *
+ * Flat until `FULL_FOR` of the window has passed — a fix a few seconds old
+ * and one a minute old are both simply where the ship is — and then falls
+ * away to `FAINTEST` at the horizon, so the ones about to be forgotten
+ * visibly are.
+ */
+const FULL_FOR = 0.2
+const FAINTEST = 0.4
+
+export function freshness(hours: number, memory: number): number {
+  if (!memory || hours <= 0) return 1
+  const used = (hours * 3600) / memory
+  if (used <= FULL_FOR) return 1
+  if (used >= 1) return FAINTEST
+  return 1 - ((used - FULL_FOR) / (1 - FULL_FOR)) * (1 - FAINTEST)
+}
+
 export function drawVessels(
   ctx: CanvasRenderingContext2D,
   project: (lat: number, lon: number) => { x: number; y: number } | null,
@@ -115,6 +157,18 @@ export function drawVessels(
    * own `seenAt`. Zero means "do not carry anything forward".
    */
   clock = 0,
+  /**
+   * How long the server keeps a ship after hearing it, in seconds.
+   *
+   * Passed in rather than imported because `lib/vessels` is server code and
+   * importing a value from it would pull the AIS parser and the chokepoint
+   * dataset into the browser bundle — and passed at all because the fleet now
+   * spans ten minutes, so some of these ships were last heard a long time
+   * ago. Drawing a fix from nine minutes back exactly as solidly as one from
+   * nine seconds back would be claiming a confidence this does not have.
+   * Zero disables the fade.
+   */
+  memory = 0,
   selected?: number,
 ): void {
   const size = HULL_SIZE * scale
@@ -125,13 +179,17 @@ export function drawVessels(
     const at = project(moved.lat, moved.lon)
     if (!at) continue
 
-    ctx.globalAlpha = v.speed > 0.5 ? MOVING : IDLE
+    ctx.globalAlpha = (v.speed > 0.5 ? MOVING : IDLE) * freshness(hours, memory)
     ctx.fillStyle = HULL
     // Lit rather than merely pale: against a dark map at this size a flat
     // triangle reads as a speck of dust, and the glow is what makes a ship
     // look like a thing with a light on it.
     ctx.shadowColor = HULL
-    ctx.shadowBlur = GLOW * scale
+    // Squared, so the halo shrinks faster than the hull as the view widens.
+    // Linear glow at world zoom turned the Channel and the Singapore Strait
+    // into single white masses: four hundred ships each carrying a halo twice
+    // the width of their own hull merge long before the hulls do.
+    ctx.shadowBlur = GLOW * scale * scale
 
     if (v.mmsi === selected) {
       // The one being read about, ringed so it can be found again among a
@@ -186,7 +244,13 @@ export function drawVessels(
 export function createVesselOverlay(
   map: google.maps.Map,
   getVessels: () => Vessel[],
-  getState: () => { active: boolean; clock: number; trails: Trails; selected?: number },
+  getState: () => {
+    active: boolean
+    clock: number
+    memory: number
+    trails: Trails
+    selected?: number
+  },
 ): google.maps.OverlayView & { redraw: () => void } {
   const canvas = document.createElement('canvas')
   canvas.style.cssText = 'position:absolute;pointer-events:none'
@@ -247,8 +311,10 @@ export function createVesselOverlay(
     // aircraft, which is exactly how it was reported.
     if (!state.active) return
 
-    drawTrails(ctx, place, state.trails)
-    drawVessels(ctx, place, getVessels(), 1, state.clock, state.selected)
+    // Tied to the zoom rather than fixed: see `zoomScale`.
+    const scale = zoomScale(map.getZoom() ?? 3)
+    drawTrails(ctx, place, state.trails, scale)
+    drawVessels(ctx, place, getVessels(), scale, state.clock, state.memory, state.selected)
   }
 
   overlay.redraw = () => overlay.draw()

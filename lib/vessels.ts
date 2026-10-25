@@ -56,19 +56,28 @@ const WATCHED = new Set(CHOKEPOINTS.map(c => c.id))
 const BOX = 4.0
 
 /**
- * How long to listen.
+ * How long to listen on a refresh.
  *
  * Yield is close to linear in this: measured over the same boxes, 7 seconds
- * returned 52 vessels, 14 returned 86 and 22 returned 144. The obvious move
- * is therefore to listen for much longer, and the reason not to is that the
- * capture blocks the request — whoever asks first waits out the whole window
- * staring at an empty sea.
+ * returned 52 vessels, 14 returned 86 and 22 returned 144. The window used to
+ * be short for one reason only — the capture sat on the request path, so
+ * whoever asked first waited it out staring at an empty sea, and ten seconds
+ * was about as long as that seemed fair.
  *
- * So the window stays short and `VESSEL_MEMORY` does the work instead: ten
- * seconds is a modest wait for the first visitor, and successive captures
- * accumulate rather than replacing each other.
+ * The route now refreshes in `after`, behind the response. Nobody waits on
+ * this one, so it is free to run long enough to be worth running.
  */
-export const CAPTURE_MS = 10000
+export const CAPTURE_MS = 30000
+
+/**
+ * How long to listen when there is nothing cached at all.
+ *
+ * The one case where somebody genuinely is waiting: a cold instance has no
+ * fleet to show, so this capture happens before the answer. Kept short for
+ * exactly that reason — it buys a sparse first paint, and the first refresh
+ * behind the response fills it in.
+ */
+export const COLD_CAPTURE_MS = 8000
 
 /**
  * How long a vessel stays on the map after it was last heard, in seconds.
@@ -80,12 +89,21 @@ export const CAPTURE_MS = 10000
  * three minutes ago has not gone anywhere: at 15 knots it has moved three
  * quarters of a mile, and it is carried forward along its own course anyway.
  *
- * Four minutes rather than longer because the error grows with the gap and
+ * Fifteen minutes rather than longer because the error grows with the gap and
  * because a ship really can stop reporting — out of range, or transponder
- * off, which off Hormuz is itself the story. Past this it is dropped rather
- * than drawn somewhere it may no longer be.
+ * off, which off Hormuz is itself the story. At ten minutes a ship making 15
+ * knots has run under four miles since its fix, which dead reckoning
+ * covers so long as it held its course; past that the guess outweighs the
+ * observation, so it is dropped rather than drawn somewhere it may not be.
+ *
+ * The map does not treat all of these as equally certain: `drawVessels`
+ * fades a ship as its fix ages, so the recently heard read as solid and the
+ * nearly-forgotten as faint.
  */
-export const VESSEL_MEMORY = 240
+export const VESSEL_MEMORY = 900
+
+/** The most vessels one answer will ever carry. See `mergeCaptures`. */
+export const MAX_VESSELS = 1200
 
 /**
  * How close to a chokepoint a vessel has to be to count while stopped.
@@ -145,6 +163,18 @@ export interface Vessel {
   kind?: string
   /** Metres, from the AIS dimension fields. */
   length?: number
+  beam?: number
+  imo?: number
+  callSign?: string
+  draught?: number
+  eta?: string
+  /**
+   * What the master says the ship is doing, in words.
+   *
+   * On the position message rather than the static one, so this is the one
+   * piece of the ship's own account that arrives with every fix.
+   */
+  navStatus?: string
 }
 
 /**
@@ -185,12 +215,24 @@ interface RawMessage {
   MessageType?: string
   MetaData?: { MMSI?: number; ShipName?: string; latitude?: number; longitude?: number; Latitude?: number; Longitude?: number }
   Message?: {
-    PositionReport?: { Cog?: number; Sog?: number; UserID?: number; Latitude?: number; Longitude?: number }
+    PositionReport?: {
+      Cog?: number
+      Sog?: number
+      UserID?: number
+      Latitude?: number
+      Longitude?: number
+      NavigationalStatus?: number
+      TrueHeading?: number
+    }
     ShipStaticData?: {
       UserID?: number
       Destination?: string
       Type?: number
       Dimension?: { A?: number; B?: number; C?: number; D?: number }
+      ImoNumber?: number
+      CallSign?: string
+      MaximumStaticDraught?: number
+      Eta?: { Month?: number; Day?: number; Hour?: number; Minute?: number }
     }
   }
 }
@@ -200,6 +242,45 @@ export interface ShipFacts {
   destination?: string
   kind?: string
   length?: number
+  /** Beam in metres, from the port and starboard dimensions. */
+  beam?: number
+  /**
+   * IMO number: the hull's permanent identity.
+   *
+   * Worth having for its own sake and worth having for the photographs. MMSI
+   * belongs to the radio licence and changes with the flag, so a ship reflagged
+   * last year has a different one; the IMO number is assigned once and stays
+   * with the hull to the scrapyard. It is the only key that reliably matches a
+   * ship here to a picture of the same ship elsewhere.
+   */
+  imo?: number
+  callSign?: string
+  /** Metres of draught the master has entered for this voyage. */
+  draught?: number
+  /** The crew's entered arrival time, as 'DD Mon HH:MM' in UTC. */
+  eta?: string
+}
+
+/**
+ * What the master has told the world the ship is doing.
+ *
+ * Reported on the position message rather than the static one, so unlike the
+ * rest of the facts it arrives with every fix. Worth surfacing because it is
+ * the one field that distinguishes a ship anchored because it has arrived
+ * from one anchored because it cannot proceed — and the codes beyond 'under
+ * way' are rare enough that seeing one is itself information.
+ */
+const NAV_STATUS: Record<number, string> = {
+  0: 'Under way using engine',
+  1: 'At anchor',
+  2: 'Not under command',
+  3: 'Restricted manoeuvrability',
+  4: 'Constrained by draught',
+  5: 'Moored',
+  6: 'Aground',
+  7: 'Engaged in fishing',
+  8: 'Under way sailing',
+  14: 'Transmitting a distress signal',
 }
 
 /**
@@ -237,10 +318,31 @@ export function readShipStatic(raw: RawMessage): { mmsi: number; facts: ShipFact
   if (!d || typeof mmsi !== 'number') return null
 
   // AIS gives the hull as distances from the transponder to bow, stern and
-  // each side; bow plus stern is the length.
+  // each side; bow plus stern is the length, port plus starboard the beam.
   const bow = d.Dimension?.A
   const stern = d.Dimension?.B
+  const port = d.Dimension?.C
+  const starboard = d.Dimension?.D
   const length = typeof bow === 'number' && typeof stern === 'number' ? bow + stern : undefined
+  const beam = typeof port === 'number' && typeof starboard === 'number' ? port + starboard : undefined
+
+  // The ETA fields are a month and day with no year, and crews leave them at
+  // zero as often as they fill them in. Rendered only when all four are a
+  // real date rather than showing '00 Jan 00:00'.
+  const e = d.Eta
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const eta = e && e.Month && e.Day && e.Month >= 1 && e.Month <= 12 && e.Day >= 1 && e.Day <= 31
+    ? `${String(e.Day).padStart(2, '0')} ${months[e.Month - 1]} ` +
+      `${String(e.Hour ?? 0).padStart(2, '0')}:${String(e.Minute ?? 0).padStart(2, '0')} UTC`
+    : undefined
+
+  // 0 is the not-available value for both, and a zero-metre draught or a
+  // zero IMO number would be drawn as fact.
+  const imo = typeof d.ImoNumber === 'number' && d.ImoNumber > 0 ? d.ImoNumber : undefined
+  const draught = typeof d.MaximumStaticDraught === 'number' && d.MaximumStaticDraught > 0
+    ? d.MaximumStaticDraught
+    : undefined
+  const callSign = (d.CallSign ?? '').replace(/[@_]+/g, '').trim() || undefined
 
   // Destinations are free text typed by crews: padded, sometimes '@@@@', often
   // shouted. Anything that is not letters and a few separators is not a place.
@@ -253,6 +355,11 @@ export function readShipStatic(raw: RawMessage): { mmsi: number; facts: ShipFact
       destination,
       kind: shipKind(d.Type),
       length: length && length > 0 ? length : undefined,
+      beam: beam && beam > 0 ? beam : undefined,
+      imo,
+      callSign,
+      draught,
+      eta,
     },
   }
 }
@@ -290,6 +397,9 @@ export function readPositionReport(raw: RawMessage): Vessel | null {
     lon: Math.round(lon * 10000) / 10000,
     course: typeof cog === 'number' && cog >= 0 && cog < 360 ? Math.round(cog) : -1,
     speed: typeof sog === 'number' && sog >= 0 && sog < 102 ? Math.round(sog * 10) / 10 : -1,
+    // 15 is the not-defined value and the codes between the named ones are
+    // reserved, so an unknown code says nothing rather than something wrong.
+    navStatus: NAV_STATUS[report.NavigationalStatus as number],
   }
 }
 
@@ -379,6 +489,17 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
 }
 
 /**
+ * Drops whatever has aged out of the window.
+ *
+ * Applied when the answer is sent, not only when a capture completes — which
+ * is a distinction that cost something to learn. The cutoff used to run only
+ * inside `mergeCaptures`, so a pool whose refreshes stalled kept being served
+ * unchanged: measured over a nine-minute poll, the route handed out fixes
+ * 1,026 and then 1,255 seconds old under a label promising the last ten
+ * minutes. Ageing at the point of serving cannot drift like that.
+ */
+
+/**
  * Folds a fresh capture into what is already known, dropping what has gone
  * stale.
  *
@@ -387,6 +508,11 @@ export function captureVessels(apiKey: string, ms = CAPTURE_MS): Promise<Vessel[
  * is let go — this is the only thing keeping the pool from growing all day
  * and the map from filling with ships that stopped reporting hours earlier.
  */
+export function stillFresh(vessels: Vessel[], now = Date.now()): Vessel[] {
+  const cutoff = now - VESSEL_MEMORY * 1000
+  return vessels.filter(v => v.seenAt >= cutoff)
+}
+
 export function mergeCaptures(
   held: Vessel[],
   fresh: Vessel[],
@@ -400,5 +526,11 @@ export function mergeCaptures(
   }
 
   const cutoff = now - VESSEL_MEMORY * 1000
-  return [...pool.values()].filter(v => v.seenAt >= cutoff)
+  const live = [...pool.values()].filter(v => v.seenAt >= cutoff)
+  if (live.length <= MAX_VESSELS) return live
+
+  // A ceiling, not a feature. The window bounds this in practice; this is
+  // here so an unusually loud ten minutes cannot quietly turn the answer
+  // into a megabyte of JSON on every client poll. Newest heard are kept.
+  return live.sort((a, b) => b.seenAt - a.seenAt).slice(0, MAX_VESSELS)
 }
