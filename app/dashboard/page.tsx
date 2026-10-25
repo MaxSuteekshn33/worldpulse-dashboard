@@ -8,6 +8,7 @@ import CountryPanel from '@/components/CountryPanel'
 import LayerTabs, { type Layer } from '@/components/LayerTabs'
 import ShippingLegend from '@/components/ShippingLegend'
 import FlightLegend from '@/components/FlightLegend'
+import ConflictLegend from '@/components/ConflictLegend'
 import CountUp from '@/components/CountUp'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
@@ -155,6 +156,16 @@ export default function Dashboard() {
             {isCompact && <br />}
             Traffic: IMF PortWatch
           </span>
+        ) : layer === 'conflict' ? (
+          // Named for the same reason, and because on this layer in
+          // particular the reader is owed the provenance: these are events a
+          // machine extracted from news coverage, not a casualty record.
+          <span className="mono-label" style={{ color: 'var(--text-4)', lineHeight: 1.5 }}>
+            Events: GDELT 2.0, machine-coded from news
+            {!isCompact && ' · '}
+            {isCompact && <br />}
+            Not verified incidents or casualty counts
+          </span>
         ) : (
           <>
             <Stat value={COUNTRIES.length} label="Countries" />
@@ -171,8 +182,8 @@ export default function Dashboard() {
             paddingLeft: isCompact ? 0 : '20px',
             borderLeft: isCompact ? 'none' : '1px solid var(--border)',
           }}>
-            {layer === 'shipping'
-              ? <ShippingLegend compact={isCompact} />
+            {layer === 'shipping' ? <ShippingLegend compact={isCompact} />
+              : layer === 'conflict' ? <ConflictLegend compact={isCompact} />
               : <FlightLegend compact={isCompact} />}
           </div>
         )}
