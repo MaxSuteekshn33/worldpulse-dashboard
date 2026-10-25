@@ -13,6 +13,7 @@ import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
 import { SOURCE_COUNT } from '@/lib/sources'
 import { useIsCompact } from '@/lib/useMediaQuery'
+import { googleMapsUrl } from '@/lib/loadGoogleMaps'
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false })
 
@@ -40,6 +41,9 @@ function Stat({ value, label }: { value: number; label: string }) {
 }
 
 export default function Dashboard() {
+  // Inlined at build, like every NEXT_PUBLIC value, so this is a constant
+  // here rather than a lookup.
+  const mapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ''
   const isCompact = useIsCompact()
   // Which question the map is answering. Lives here because both the tabs and
   // the map need it, and switching must not remount either.
@@ -56,6 +60,23 @@ export default function Dashboard() {
       width: '100vw', height: '100dvh', background: 'var(--bg)',
       position: 'relative', overflow: 'hidden',
     }}>
+      {/*
+        Starts the Maps API downloading from the HTML, instead of from the far
+        end of a chain.
+
+        Nothing about the map could begin until React had hydrated, the lazy
+        chunk holding the map component had arrived, and its effect had run —
+        only then was the script tag created. Three serial steps before the
+        request that the whole screen is waiting on even left the browser, and
+        "Loading the world" sat there for all of them.
+
+        React hoists this into the head of the server-rendered HTML, so the
+        fetch starts alongside the page's own JavaScript rather than behind
+        it. The URL is the one `loadGoogleMaps` uses, from the same function,
+        so the script tag finds it already in the cache.
+      */}
+      {mapsKey && <link rel="preload" as="script" href={googleMapsUrl(mapsKey)} />}
+
       {/* ── NAV ── */}
       <header style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300,

@@ -1,3 +1,19 @@
+/**
+ * The exact script URL the API is loaded from.
+ *
+ * Exported so the page can tell the browser to start fetching it before
+ * anything has hydrated. The two must be the same string down to the query
+ * order or the preload fetches one resource and the script tag another,
+ * which is worse than not preloading at all — so there is one definition and
+ * both callers use it.
+ */
+export function googleMapsUrl(apiKey: string): string {
+  return (
+    `https://maps.googleapis.com/maps/api/js?key=${apiKey}` +
+    '&libraries=marker&region=IN&language=en&loading=async&callback=__worldpulseMapsReady'
+  )
+}
+
 let loadPromise: Promise<void> | null = null
 
 /**
@@ -19,9 +35,7 @@ export function loadGoogleMaps(apiKey: string): Promise<void> {
 
   loadPromise = new Promise<void>((resolve, reject) => {
     const script = document.createElement('script')
-    script.src =
-      `https://maps.googleapis.com/maps/api/js?key=${apiKey}` +
-      '&libraries=marker&region=IN&language=en&loading=async&callback=__worldpulseMapsReady'
+    script.src = googleMapsUrl(apiKey)
     script.async = true
     script.defer = true
     script.onerror = () => reject(new Error('Google Maps failed to load'))
