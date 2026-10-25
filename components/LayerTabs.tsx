@@ -16,7 +16,12 @@ const TABS: { id: Layer; label: string; hint: string; Icon: typeof Ship }[] = [
   { id: 'news', label: 'News', hint: 'What every country is reporting', Icon: Newspaper },
   { id: 'shipping', label: 'Shipping', hint: 'Lanes and chokepoint traffic', Icon: Ship },
   { id: 'flights', label: 'Flights', hint: 'Live aircraft, military highlighted', Icon: Plane },
-  { id: 'conflict', label: 'Conflict', hint: 'Reported violence and unrest', Icon: Flame },
+  {
+    id: 'conflict',
+    label: 'Hot Red Alert News',
+    hint: 'Reported violence and unrest',
+    Icon: Flame,
+  },
 ]
 
 export default function LayerTabs({

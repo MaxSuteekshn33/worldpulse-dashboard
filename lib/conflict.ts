@@ -171,9 +171,26 @@ export interface ConflictEvent {
 const COL = {
   id: 0, root: 28, code: 26, goldstein: 30, articles: 33,
   actor1: 6, actor2: 16,
-  place: 52, lat: 56, lon: 57,
+  place: 52, country: 53, lat: 56, lon: 57,
   added: 59, url: 60,
 }
+
+/**
+ * Countries whose events this layer does not show.
+ *
+ * An editorial choice, not a data problem: India is left off at the moment
+ * by request. It is a large share of what the feed carries — 42 of 766 rows
+ * in a sample window, and the two most heavily covered events in another
+ * were both Maharashtra — so leaving it in crowds out the rest of the world
+ * on a map that is supposed to show all of it.
+ *
+ * Matched on GDELT's country code rather than the place name, which is not
+ * the same test and would be wrong: the sample contained a US event whose
+ * place name matches 'India' — Indiana. GDELT uses FIPS 10-4 here, where
+ * India is `IN`; Indonesia is `ID` and the British Indian Ocean Territory is
+ * `IO`, so there is nothing to collide with.
+ */
+const HIDDEN_COUNTRIES = new Set(['IN'])
 
 function clean(v: string | undefined): string | undefined {
   const t = (v ?? '').trim()
@@ -203,6 +220,7 @@ export function parseExport(csv: string): ConflictEvent[] {
 
     const severity = ROOT_SEVERITY[f[COL.root]]
     if (!severity) continue
+    if (HIDDEN_COUNTRIES.has((f[COL.country] ?? '').trim())) continue
 
     const lat = Number(f[COL.lat])
     const lon = Number(f[COL.lon])
