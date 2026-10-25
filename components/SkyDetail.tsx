@@ -1,5 +1,8 @@
 'use client'
+import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { X } from 'lucide-react'
+import type { AircraftPhoto } from '@/lib/aircraftPhotos'
 import type { Aircraft } from '@/lib/flights'
 import { type AirHub, type Corridor, arcMiles, corridorName } from '@/lib/airways'
 import { HUB_RADIUS_NM, type HubReading } from '@/lib/airspace'
@@ -52,6 +55,96 @@ const POINTS = [
   'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW',
 ]
 
+/**
+ * A photograph of this airframe, when Planespotters has one.
+ *
+ * Simpler than the ship panel's equivalent and better at its job, because a
+ * registration identifies one aircraft and a ship's name does not identify
+ * one ship. There is no "may be a different vessel of the same name" caveat
+ * here: `G-EZWR` is `G-EZWR`. Measured at ten of ten for civil traffic, and
+ * thinner for military, where serials are catalogued less consistently.
+ *
+ * The credit and the link are not decoration. Planespotters' terms require
+ * the photographer beside the image and the image linked back to its page,
+ * and the link must not be `nofollow` — so this uses `rel="noopener"` alone
+ * rather than the usual `noopener noreferrer`, which would strip the
+ * referrer they ask to receive.
+ */
+function AircraftPhotoPanel({ aircraft }: { aircraft: Aircraft }) {
+  // Tagged with the airframe it belongs to rather than cleared at the top of
+  // the effect, which would be a synchronous setState inside an effect and
+  // cascade a render on every open.
+  const [result, setResult] = useState<{ hex: string; photo: AircraftPhoto | null } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const query = new URLSearchParams({ hex: aircraft.hex })
+    if (aircraft.registration) query.set('registration', aircraft.registration)
+
+    fetch(`/api/aircraft-photo?${query}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setResult({ hex: aircraft.hex, photo: d.photo ?? null }) })
+      .catch(() => { if (!cancelled) setResult({ hex: aircraft.hex, photo: null }) })
+
+    return () => { cancelled = true }
+  }, [aircraft.hex, aircraft.registration])
+
+  const mine = result?.hex === aircraft.hex
+  const photo = mine ? result.photo : null
+
+  if (!photo) {
+    // Nothing afterwards if there is nothing: an empty frame announcing the
+    // absence would be the loudest thing in the panel.
+    return mine ? null : (
+      <div className="mono-label" style={{ color: 'var(--text-4)', padding: '2px 0 8px' }}>
+        looking for a photograph…
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ margin: '0 0 12px' }}>
+      <a
+        href={photo.link}
+        target="_blank"
+        rel="noopener"
+        style={{
+          display: 'block', position: 'relative', width: '100%', aspectRatio: '3 / 2',
+          borderRadius: '10px', overflow: 'hidden',
+          border: '1px solid var(--border)', background: 'rgba(255,255,255,.03)',
+        }}
+      >
+        <Image
+          src={photo.url}
+          alt={`${aircraft.registration ?? aircraft.hex.toUpperCase()} — photograph from Planespotters`}
+          fill
+          sizes="320px"
+          style={{ objectFit: 'cover' }}
+          unoptimized
+        />
+      </a>
+      <div className="mono-label" style={{
+        color: 'var(--text-4)', marginTop: '6px', lineHeight: 1.5,
+      }}>
+        {aircraft.registration
+          ? `This airframe · ${aircraft.registration}`
+          : `This airframe · ICAO ${aircraft.hex.toUpperCase()}`}
+        <br />
+        <a
+          href={photo.link}
+          target="_blank"
+          rel="noopener"
+          style={{ color: 'var(--text-3)', textDecoration: 'underline' }}
+        >
+          Planespotters
+        </a>
+        {photo.photographer ? ` · ${photo.photographer}` : ''}
+      </div>
+    </div>
+  )
+}
+
 export function AircraftDetail({ aircraft, nearest, onClose }: {
   aircraft: Aircraft
   /** The country it is closest to, and how far in nautical miles. */
@@ -74,6 +167,8 @@ export function AircraftDetail({ aircraft, nearest, onClose }: {
       ].filter(Boolean).join(' · ')}
       onClose={onClose}
     >
+      <AircraftPhotoPanel aircraft={aircraft} />
+
       <Row
         label="Altitude"
         value={a.onGround
