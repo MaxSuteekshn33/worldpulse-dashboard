@@ -652,6 +652,23 @@ button:active, [role="button"]:active { opacity: .85; }
   }
 }
 
+/* The narrowest phones still in use are 320px, and the wordmark plus four
+   44px tabs want 360. Measured there, the bar ran to x344 and the fourth tab
+   — the one added most recently — was cut in half by the screen edge. The
+   row tightens rather than the tabs disappearing: the wordmark gives up a
+   few points, the gaps close, and the tabs keep a 44px height with a
+   slightly narrower box.
+
+   The threshold is 360 because that is exactly what the untightened row
+   needs — 16 padding, 126 of wordmark, 12 gap, 190 of tabs, 16 padding. A
+   375px iPhone has the room and keeps the full-size tabs. */
+@media (max-width: 360px) {
+  .dash-head { padding-left: 12px !important; padding-right: 12px !important; }
+  .dash-mark { font-size: 14px !important; }
+  .layer-tabs { gap: 0; padding: 2px; }
+  .layer-tabs button { min-width: 40px; padding: 7px 6px; }
+}
+
 .layer-tabs button:hover { color: var(--text-3); }
 
 .layer-tabs button.is-on {
@@ -702,5 +719,12 @@ button:active, [role="button"]:active { opacity: .85; }
   cursor: pointer;
   transition: color .2s ease, background .2s ease;
 }
+/* The only way to dismiss the card, and at 26px it was a mouse target.
+   Given a finger's worth of room on a touch-sized screen; the icon inside
+   keeps its size, so only the hit area grows. */
+@media (max-width: 860px) {
+  .sea-detail-close { width: 44px; height: 44px; border-radius: 12px; }
+}
+
 .sea-detail-close:hover { color: var(--text); background: rgba(255, 255, 255, .06); }
 .sea-detail-close:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }

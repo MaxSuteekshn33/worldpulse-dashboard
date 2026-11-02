@@ -88,10 +88,14 @@ export default function Dashboard() {
         backdropFilter: 'blur(20px)',
         display: 'flex', alignItems: 'center',
         padding: `var(--safe-top) ${isCompact ? '16px' : '28px'} 0`,
-      }}>
+      }}
+      // Named so the narrowest phones can tighten this row in CSS: at 320px
+      // the wordmark and the four tabs together want 360px.
+      className="dash-head"
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '13px', height: `${navHeight}px` }}>
           <Link href="/" style={{ textDecoration: 'none' }}>
-            <span style={{
+            <span className="dash-mark" style={{
               fontFamily: 'Archivo, sans-serif', fontWeight: 900,
               fontSize: isCompact ? '17px' : '19px',
               color: 'var(--text)', letterSpacing: '-.03em',
