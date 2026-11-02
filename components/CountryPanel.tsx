@@ -120,8 +120,20 @@ export default function CountryPanel({ introMs = 0 }: { introMs?: number }) {
     writePanel(next)
   }
 
-  /** Open because they left it open, or because the dashboard just opened. */
-  const showing = intro || choice === 'open'
+  /**
+   * Open because they left it open, or because the dashboard just opened.
+   *
+   * With one exception, and it is a phone-sized one: expanded, this card is
+   * about half of a 375px screen, so restoring a remembered "open" there
+   * means every later visit arrives with half the map behind a search box
+   * nobody asked for again. On a narrow screen the remembered choice only
+   * applies once it has been made in this page view — so it opens collapsed,
+   * one tap opens it, and it stays open while you are using it.
+   *
+   * The desktop is untouched: there the card sits in a corner of a much
+   * wider map and covers nothing worth seeing.
+   */
+  const showing = intro || (choice === 'open' && (!isCompact || openedByUser))
 
   // Escape closes it. Deliberately no click-outside: the surface behind this
   // panel is a draggable map, and ending a pan over the map would snap it shut.

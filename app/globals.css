@@ -639,6 +639,19 @@ button:active, [role="button"]:active { opacity: .85; }
   transition: color .2s ease, background .2s ease;
 }
 
+/* On a touch screen these are the primary navigation and they were 42x28,
+   which is a mouse target. The labels are already hidden at this width, so
+   the icon gets a proper 44px square around it instead — the bar grows by
+   about six pixels in total and still sits beside the wordmark. */
+@media (max-width: 860px) {
+  .layer-tabs button {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+    padding: 7px 10px;
+  }
+}
+
 .layer-tabs button:hover { color: var(--text-3); }
 
 .layer-tabs button.is-on {
