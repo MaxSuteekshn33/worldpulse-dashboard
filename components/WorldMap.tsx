@@ -226,6 +226,55 @@ const GLOBE_PIXELS = 360_000
 const TAP_SLOP_PX = 24
 
 /**
+ * The small status line each live layer puts in a corner of the map.
+ *
+ * One component rather than three near-identical blocks, which is partly
+ * tidiness and mostly so that the three layers cannot drift apart in how
+ * they describe themselves — they already had to be corrected once for
+ * sitting in the wrong corner on a phone.
+ *
+ * `waiting` dims it and is used before a layer has any data. That state is
+ * the reason this exists: opening shipping, flights or the alert layer used
+ * to show an untouched map for as long as the first fetch took — up to
+ * fifteen seconds on a cold conflict sweep — with nothing anywhere saying
+ * that something was on its way.
+ */
+function CornerNote({ text, waiting, place }: {
+  text: string
+  waiting?: boolean
+  place: React.CSSProperties
+}) {
+  return (
+    <div
+      className="mono-label"
+      aria-live="polite"
+      style={{
+        position: 'absolute', zIndex: 210,
+        ...place,
+        padding: '8px 13px', borderRadius: '10px',
+        border: '1px solid var(--border-mid)',
+        background: 'rgba(8,8,12,.84)',
+        backdropFilter: 'blur(14px)',
+        color: waiting ? 'var(--text-4)' : 'var(--text-3)',
+        display: 'inline-flex', alignItems: 'center', gap: '8px',
+      }}
+    >
+      {waiting && (
+        <span
+          className="shimmer"
+          aria-hidden
+          style={{
+            width: '7px', height: '7px', borderRadius: '50%',
+            background: 'var(--accent)', flex: 'none',
+          }}
+        />
+      )}
+      {text}
+    </div>
+  )
+}
+
+/**
  * A note on the zoom, so the next person does not repeat the experiment.
  *
  * A phone opens on roughly a quarter of the world and cannot pull back to
@@ -1696,25 +1745,27 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           is drawn is every ship heard in the last few minutes rather than
           every ship at sea. Says plainly when there is no key, too, rather
           than showing empty seas. */}
-      {layer === 'shipping' && fleet && (
-        <div
-          className="mono-label"
-          style={{
-            position: 'absolute', zIndex: 210,
-            ...noteCorner,
-            padding: '8px 13px', borderRadius: '10px',
-            border: '1px solid var(--border-mid)',
-            background: 'rgba(8,8,12,.84)',
-            backdropFilter: 'blur(14px)',
-            color: fleet.configured ? 'var(--text-3)' : 'var(--text-4)',
-          }}
-        >
-          {fleet.configured
-            ? fleet.memory
-              ? `${fleet.count} ships · heard in the last ${Math.round(fleet.memory / 60)} min`
-              : `${fleet.count} ships · sampled live`
-            : 'Live vessels off — set AISSTREAM_KEY'}
-        </div>
+      {layer === 'shipping' && (
+        <CornerNote
+          place={noteCorner}
+          waiting={!fleet}
+          text={
+            !fleet
+              ? 'Listening for vessels…'
+              : !fleet.configured
+                ? 'Live vessels off — set AISSTREAM_KEY'
+                // An empty capture is a real outcome, not a count of zero to
+                // be printed as if it were a reading: the socket may have
+                // been refused, or that burst may simply have caught nothing.
+                // Either way the next one is seconds away, and saying so is
+                // more use than "0 ships".
+                : !fleet.count
+                  ? 'No vessels heard yet — listening again shortly'
+                  : fleet.memory
+                    ? `${fleet.count} ships · heard in the last ${Math.round(fleet.memory / 60)} min`
+                    : `${fleet.count} ships · sampled live`
+          }
+        />
       )}
 
       {/* ── SKY NOTE ──
@@ -1722,55 +1773,54 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           provider's radius cap it is showing military traffic only, and a
           count of "12 aircraft" over the Pacific would otherwise read as an
           empty sky rather than as a narrowed question. */}
-      {layer === 'flights' && sky && (
-        <div
-          className="mono-label"
-          style={{
-            position: 'absolute', zIndex: 210,
-            ...noteCorner,
-            padding: '8px 13px', borderRadius: '10px',
-            border: '1px solid var(--border-mid)',
-            background: 'rgba(8,8,12,.84)',
-            backdropFilter: 'blur(14px)',
-            color: sky.unavailable ? 'var(--text-4)' : 'var(--text-3)',
-          }}
-        >
-          {sky.unavailable
-            ? 'Aircraft feed unavailable — showing last known'
-            : sky.mode === 'mil'
-              ? `${sky.military} military aircraft · worldwide${
-                  view === 'map' ? ' · zoom in for all traffic' : ''
-                }`
-              : sky.mode === 'sample'
-                // Says "around N hubs" rather than a bare count, because the
-                // count is true and the impression a bare one gives is not:
-                // this is the traffic near a few airports, not the sky.
-                ? `${sky.count} aircraft around ${sky.sampled} hubs · zoom in for all traffic`
-                : `${sky.count} aircraft · ${sky.military} military`}
-        </div>
+      {layer === 'flights' && (
+        <CornerNote
+          place={noteCorner}
+          waiting={!sky}
+          text={
+            !sky
+              ? 'Finding aircraft…'
+              : sky.unavailable
+                ? 'Aircraft feed unavailable — showing last known'
+                : sky.mode === 'mil'
+                  ? `${sky.military} military aircraft · worldwide${
+                      view === 'map' ? ' · zoom in for all traffic' : ''
+                    }`
+                  : sky.mode === 'sample'
+                    // Says "around N hubs" rather than a bare count, because
+                    // the count is true and the impression a bare one gives
+                    // is not: this is the traffic near a few airports, not
+                    // the sky.
+                    ? `${sky.count} aircraft around ${sky.sampled} hubs · zoom in for all traffic`
+                    : `${sky.count} aircraft · ${sky.military} military`
+          }
+        />
       )}
 
       {/* ── UNREST NOTE ──
           Says what the rings are and over what window, because a count of
           events means nothing without one — three hundred events is a quiet
           six hours or an extraordinary quarter of an hour. */}
-      {layer === 'conflict' && unrest && (
-        <div
-          className="mono-label"
-          style={{
-            position: 'absolute', zIndex: 210,
-            ...noteCorner,
-            padding: '8px 13px', borderRadius: '10px',
-            border: '1px solid var(--border-mid)',
-            background: 'rgba(8,8,12,.84)',
-            backdropFilter: 'blur(14px)',
-            color: unrest.count ? 'var(--text-3)' : 'var(--text-4)',
-          }}
-        >
-          {unrest.count
-            ? `${unrest.count} reported events · last ${Math.round(unrest.memory / 3600)} h`
-            : 'Event feed unavailable'}
-        </div>
+      {layer === 'conflict' && (
+        <CornerNote
+          place={noteCorner}
+          waiting={!unrest}
+          // The slowest of the three to arrive — a cold sweep pulls ninety
+          // minutes of fifteen-minute exports — so this is the one that most
+          // needed something to say while it works.
+          text={
+            !unrest
+              ? 'Reading the last few hours…'
+              // `memory` only arrives with a successful answer, so it is what
+              // separates a feed that failed from a window that genuinely
+              // held nothing. These were being reported as the same thing.
+              : !unrest.memory
+                ? 'Event feed unavailable'
+                : unrest.count
+                  ? `${unrest.count} reported events · last ${Math.round(unrest.memory / 3600)} h`
+                  : `Nothing reported in the last ${Math.round(unrest.memory / 3600)} h`
+          }
+        />
       )}
 
       {/* ── WHICH EVENT YOU CLICKED ── */}
