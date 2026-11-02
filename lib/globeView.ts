@@ -90,6 +90,8 @@ export interface GlobeView {
   setMarkers(next: Map<string, GlobeMarker>): void
   /** Redraws once without waiting for the clock — after a layer change. */
   refresh(): void
+  /** Rebuilds the sphere after the stage changes size — a rotation, mostly. */
+  resize(width: number, height: number, fit: number): void
   run(): void
   stop(): void
   showMarkers(on: boolean): void
@@ -97,20 +99,27 @@ export interface GlobeView {
 }
 
 export function createGlobeView(host: GlobeViewHost): GlobeView {
-  const { canvas, stage, terrain, fit } = host
+  const { canvas, stage, terrain } = host
   let markers = host.markers
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('no 2d context')
 
+  // All of these change when the stage does — when a phone is turned over,
+  // most of all — so none of them can be a constant. The globe used to be
+  // built once at whatever size the stage happened to be, and a rotation
+  // left it drawn for the old one: a portrait-shaped sphere on a landscape
+  // screen, with every bubble placed against a circle that was no longer
+  // where the circle was.
+  let fit = host.fit
   let geometry: GlobeGeometry | null = buildGlobe(canvas.width, canvas.height)
   let frame: ImageData | null = ctx.createImageData(canvas.width, canvas.height)
 
   // The same circle in the units the markers are positioned in.
-  const cssCx = geometry.cx / fit
-  const cssCy = geometry.cy / fit
-  const cssRadius = geometry.radius / fit
-  const cssW = canvas.width / fit
-  const cssH = canvas.height / fit
+  let cssCx = geometry.cx / fit
+  let cssCy = geometry.cy / fit
+  let cssRadius = geometry.radius / fit
+  let cssW = canvas.width / fit
+  let cssH = canvas.height / fit
 
   let spin = 12
   let tilt = DEFAULT_TILT
@@ -253,6 +262,35 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
     },
 
     refresh() {
+      draw()
+      placeMarkers()
+    },
+
+    /**
+     * Rebuilds the sphere for a new stage size.
+     *
+     * Everything derived from the old dimensions has to be recomputed, not
+     * just the canvas: the per-pixel direction table, the frame buffer, and
+     * the circle the markers are placed against. The terrain is untouched —
+     * it is the one expensive thing here and it does not depend on the size.
+     */
+    resize(nextW: number, nextH: number, nextFit: number) {
+      if (nextW < 2 || nextH < 2) return
+      if (canvas.width === nextW && canvas.height === nextH && fit === nextFit) return
+
+      canvas.width = nextW
+      canvas.height = nextH
+      fit = nextFit
+
+      geometry = buildGlobe(nextW, nextH)
+      frame = ctx!.createImageData(nextW, nextH)
+
+      cssCx = geometry.cx / fit
+      cssCy = geometry.cy / fit
+      cssRadius = geometry.radius / fit
+      cssW = nextW / fit
+      cssH = nextH / fit
+
       draw()
       placeMarkers()
     },

@@ -873,6 +873,24 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   }, [])
 
   /** Built the first time the globe is asked for, then kept. */
+  /**
+   * How big to draw the sphere for a stage of this size.
+   *
+   * One function so the first build and every later rebuild cannot drift
+   * apart about it — the globe is redrawn per pixel each frame, so the
+   * budget is a pixel count rather than a resolution, and the fit is what
+   * spends it.
+   */
+  function globeSize(stage: HTMLElement) {
+    const rect = stage.getBoundingClientRect()
+    const fit = Math.min(1, Math.sqrt(GLOBE_PIXELS / Math.max(1, rect.width * rect.height)))
+    return {
+      width: Math.max(320, Math.round(rect.width * fit)),
+      height: Math.max(240, Math.round(rect.height * fit)),
+      fit,
+    }
+  }
+
   async function ensureGlobe(): Promise<GlobeView | null> {
     if (globeRef.current) return globeRef.current
     const canvas = globeCanvas.current
@@ -882,16 +900,15 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     let terrain
     try { terrain = await loadTerrain('/world-terrain.webp') } catch { return null }
 
-    const rect = stage.getBoundingClientRect()
-    const fit = Math.min(1, Math.sqrt(GLOBE_PIXELS / Math.max(1, rect.width * rect.height)))
-    canvas.width = Math.max(320, Math.round(rect.width * fit))
-    canvas.height = Math.max(240, Math.round(rect.height * fit))
+    const size = globeSize(stage)
+    canvas.width = size.width
+    canvas.height = size.height
 
     globeRef.current = createGlobeView({
       canvas,
       stage,
       terrain,
-      fit,
+      fit: size.fit,
       markers: new Map(markersRef.current),
       // Read through the ref rather than captured, so switching layers does
       // not mean rebuilding the globe.
@@ -1652,6 +1669,47 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     const timer = window.setInterval(tick, 30_000)
     return () => { window.clearTimeout(soon); window.clearInterval(timer) }
   }, [picked])
+
+  /**
+   * Rebuilds the globe when the stage changes shape.
+   *
+   * Turning a phone over is the case this exists for. Nothing in the app
+   * locks orientation — there is no manifest and no `screen.orientation`
+   * call — so the browser has always been free to rotate, and the flat map,
+   * the layout and the media queries all follow. The globe did not: it was
+   * built once at whatever size the stage happened to be and never asked
+   * again, so a rotation left a portrait-shaped sphere on a landscape screen
+   * with every bubble placed against a circle that had moved.
+   *
+   * A `ResizeObserver` rather than a `resize` listener, because the stage
+   * can change without the window doing so, and a rotation is only the
+   * loudest example.
+   *
+   * Debounced on a timer rather than an animation frame. The first version
+   * used `requestAnimationFrame` and was caught not rebuilding at all:
+   * frames do not come to a page the browser is not drawing, so the rebuild
+   * sat queued and the globe kept its old shape. This is the same trap the
+   * dashboard's opening animation fell into, and the same answer — a clock
+   * runs whether or not anything is being painted.
+   */
+  useEffect(() => {
+    const stage = globeStage.current
+    if (!stage || typeof ResizeObserver === 'undefined') return
+
+    let timer = 0
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        const globe = globeRef.current
+        if (!globe) return
+        const size = globeSize(stage)
+        globe.resize(size.width, size.height, size.fit)
+      }, 80)
+    })
+
+    observer.observe(stage)
+    return () => { window.clearTimeout(timer); observer.disconnect() }
+  }, [])
 
   /**
    * Shows a layer's one-line explanation the first time it is opened.
