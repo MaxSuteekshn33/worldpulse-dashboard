@@ -1,7 +1,7 @@
 'use client'
+import { Entry, Note, Row, Section, Shell } from '@/components/Detail'
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { X } from 'lucide-react'
 import type { ShipPhoto } from '@/lib/shipPhotos'
 import type { Chokepoint } from '@/lib/chokepoints'
 import type { ChokepointReading } from '@/lib/shipping'
@@ -36,36 +36,6 @@ function Spark({ series, color }: { series: number[]; color: string }) {
       <polyline points={line} fill="none" stroke={color} strokeWidth="1.6"
         strokeLinejoin="round" strokeLinecap="round" />
     </svg>
-  )
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', padding: '5px 0' }}>
-      <span className="mono-label" style={{ color: 'var(--text-4)' }}>{label}</span>
-      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)', textAlign: 'right' }}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-function Shell({ title, sub, onClose, children }: {
-  title: string; sub: string; onClose: () => void; children: React.ReactNode
-}) {
-  return (
-    <div className="sea-detail">
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="display-lg" style={{ fontSize: '20px', lineHeight: 1.15 }}>{title}</div>
-          <div className="mono-label" style={{ color: 'var(--text-4)', marginTop: '5px' }}>{sub}</div>
-        </div>
-        <button type="button" onClick={onClose} aria-label="Close" className="sea-detail-close">
-          <X size={15} strokeWidth={2.2} aria-hidden />
-        </button>
-      </div>
-      <div style={{ marginTop: '14px' }}>{children}</div>
-    </div>
   )
 }
 
@@ -161,10 +131,7 @@ export function LaneDetail({ route, traffic, onClose }: {
       <Row label="Steaming time" value={`≈ ${Math.round(route.miles / 14 / 24)} days at 14 knots`} />
 
       {traffic && traffic.count > 0 && (
-        <div style={{ marginTop: '10px', borderTop: '1px solid var(--border)', paddingTop: '9px' }}>
-          <div className="mono-label" style={{ color: 'var(--text-4)', marginBottom: '6px' }}>
-            Tracked ships on this lane
-          </div>
+        <Section title="Tracked ships on this lane">
           <Row label={`Within ${ON_LANE_NM} nm`} value={`${traffic.count}`} />
           <Row label="Making way" value={`${traffic.moving}`} />
           {traffic.medianSpeed !== null && (
@@ -173,22 +140,18 @@ export function LaneDetail({ route, traffic, onClose }: {
           {traffic.notable.length > 0 && (
             <div style={{ marginTop: '6px' }}>
               {traffic.notable.map(v => (
-                <div key={v.name} style={{
-                  display: 'flex', justifyContent: 'space-between', gap: '12px',
-                  padding: '3px 0', fontSize: '12.5px', color: 'var(--text-2)',
-                }}>
-                  <span style={{ fontWeight: 600 }}>
+                <Entry
+                  key={v.name}
+                  name={<>
                     {v.name}
                     {v.kind ? <span style={{ opacity: 0.5 }}>{` ${v.kind}`}</span> : null}
-                  </span>
-                  <span style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                    {v.length ? `${v.length}m · ` : ''}{v.speed} kn
-                  </span>
-                </div>
+                  </>}
+                  meta={`${v.length ? `${v.length}m · ` : ''}${v.speed} kn`}
+                />
               ))}
             </div>
           )}
-        </div>
+        </Section>
       )}
 
       {route.via.length > 0 ? (
@@ -210,21 +173,15 @@ export function LaneDetail({ route, traffic, onClose }: {
           ))}
         </div>
       ) : (
-        <div className="mono-label" style={{
-          color: 'var(--text-4)', marginTop: '10px',
-          borderTop: '1px solid var(--border)', paddingTop: '9px', lineHeight: 1.5,
-        }}>
+        <Note>
           Open-water leg — passes none of the 28 chokepoints.
-        </div>
+        </Note>
       )}
 
-      <div className="mono-label" style={{
-        color: 'var(--text-4)', marginTop: '10px',
-        borderTop: '1px solid var(--border)', paddingTop: '9px', lineHeight: 1.5,
-      }}>
+      <Note>
         A route ships follow, not a ship&apos;s track. Described from the line
         itself — the dataset names none of them.
-      </div>
+      </Note>
     </Shell>
   )
 }
@@ -382,10 +339,7 @@ export function ShipDetail({ vessel, nearest, onClose }: {
       {ageMin !== null && (
         <Row label="Last heard" value={ageMin < 1 ? 'moments ago' : `${ageMin} min ago`} />
       )}
-      <div className="mono-label" style={{
-        color: 'var(--text-4)', marginTop: '10px',
-        borderTop: '1px solid var(--border)', paddingTop: '9px', lineHeight: 1.5,
-      }}>
+      <Note>
         {vessel.speed > 0.5
           ? 'Track shows recent fixes; the hull is carried forward on its own reported course between them.'
           : 'Stopped — holding position at a chokepoint.'}
@@ -394,7 +348,7 @@ export function ShipDetail({ vessel, nearest, onClose }: {
             stale, wrong, or left over from the last voyage. */}
         {(vessel.destination || vessel.eta) &&
           ' Destination and ETA are entered by the crew and are often out of date.'}
-      </div>
+      </Note>
     </Shell>
   )
 }

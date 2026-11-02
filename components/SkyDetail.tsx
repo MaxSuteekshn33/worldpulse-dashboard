@@ -1,7 +1,7 @@
 'use client'
+import { Entry, Note, Row, Section, Shell } from '@/components/Detail'
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { X } from 'lucide-react'
 import type { AircraftPhoto } from '@/lib/aircraftPhotos'
 import type { Aircraft } from '@/lib/flights'
 import { type AirHub, type Corridor, arcMiles, corridorName } from '@/lib/airways'
@@ -20,36 +20,6 @@ import { HUB_RADIUS_NM, type HubReading } from '@/lib/airspace'
  * reuse. The three panels below do share them, because they are in the same
  * file and about the same layer.
  */
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', padding: '5px 0' }}>
-      <span className="mono-label" style={{ color: 'var(--text-4)' }}>{label}</span>
-      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)', textAlign: 'right' }}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-function Shell({ title, sub, onClose, children }: {
-  title: string; sub: string; onClose: () => void; children: React.ReactNode
-}) {
-  return (
-    <div className="sea-detail">
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="display-lg" style={{ fontSize: '20px', lineHeight: 1.15 }}>{title}</div>
-          <div className="mono-label" style={{ color: 'var(--text-4)', marginTop: '5px' }}>{sub}</div>
-        </div>
-        <button type="button" onClick={onClose} aria-label="Close" className="sea-detail-close">
-          <X size={15} strokeWidth={2.2} aria-hidden />
-        </button>
-      </div>
-      <div style={{ marginTop: '14px' }}>{children}</div>
-    </div>
-  )
-}
-
 const POINTS = [
   'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
   'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW',
@@ -196,17 +166,14 @@ export function AircraftDetail({ aircraft, nearest, onClose }: {
       {nearest && (
         <Row label="Nearest country" value={`${nearest.name} · ${Math.round(nearest.miles)} nm`} />
       )}
-      <div className="mono-label" style={{
-        color: 'var(--text-4)', marginTop: '10px',
-        borderTop: '1px solid var(--border)', paddingTop: '9px', lineHeight: 1.5,
-      }}>
+      <Note>
         {/* Said once, here, because it is the single most likely thing to be
             misread about this layer: ADS-B is a transponder reporting its own
             position, not a flight booking. There is no schedule in it. */}
         Live transponder position — ADS-B carries no departure or arrival
         times. The airframe is carried forward on its own reported track
         between fetches.
-      </div>
+      </Note>
     </Shell>
   )
 }
@@ -256,14 +223,11 @@ export function HubDetail({ hub, reading, onClose }: {
             : `Only part of this airspace is on screen. Pan to centre ${hub.city} for a full count.`}
         </div>
         <Row label="Position" value={`${hub.lat.toFixed(3)}, ${hub.lon.toFixed(3)}`} />
-        <div className="mono-label" style={{
-          color: 'var(--text-4)', marginTop: '10px',
-          borderTop: '1px solid var(--border)', paddingTop: '9px', lineHeight: 1.5,
-        }}>
+        <Note>
           Hub figures are counted from the aircraft already on screen, within
           {` ${HUB_RADIUS_NM} nm`} of the field. Nothing is fetched for them, so
           they only exist where you are looking.
-        </div>
+        </Note>
       </>,
     )
   }
@@ -296,36 +260,27 @@ export function HubDetail({ hub, reading, onClose }: {
       )}
 
       {r!.arrivals.length > 0 && (
-        <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
-          <div className="mono-label" style={{ color: 'var(--text-4)', marginBottom: '6px' }}>
-            Closest inbound
-          </div>
+        <Section title="Closest inbound">
           {r!.arrivals.map(a => (
-            <div key={a.hex} style={{
-              display: 'flex', justifyContent: 'space-between', gap: '12px',
-              padding: '3px 0', fontSize: '12.5px', color: 'var(--text-2)',
-            }}>
-              <span style={{ fontWeight: 600 }}>
+            <Entry
+              key={a.hex}
+              name={<>
                 {a.callsign ?? a.hex.toUpperCase()}
                 {a.type ? <span style={{ opacity: 0.5 }}>{` ${a.type}`}</span> : null}
-              </span>
-              <span style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                {Math.round(a.distance)} nm
-                {a.altitude !== null ? ` · ${a.altitude.toLocaleString()} ft` : ''}
-              </span>
-            </div>
+              </>}
+              meta={`${Math.round(a.distance)} nm${
+                a.altitude !== null ? ` · ${a.altitude.toLocaleString()} ft` : ''
+              }`}
+            />
           ))}
-        </div>
+        </Section>
       )}
 
-      <div className="mono-label" style={{
-        color: 'var(--text-4)', marginTop: '10px',
-        borderTop: '1px solid var(--border)', paddingTop: '9px', lineHeight: 1.5,
-      }}>
+      <Note>
         A snapshot, not a trend. Inbound and outbound are aircraft below
         24,000 ft pointed at the field or away from it; there is no schedule in
         ADS-B to check them against.
-      </div>
+      </Note>
     </>,
   )
 }
@@ -373,15 +328,12 @@ export function CorridorDetail({ corridor, hubs, onClose }: {
           value={`≈ ${Math.round((miles / 460 + 1) * 10) / 10} hours`}
         />
       )}
-      <div className="mono-label" style={{
-        color: 'var(--text-4)', marginTop: '10px',
-        borderTop: '1px solid var(--border)', paddingTop: '9px', lineHeight: 1.5,
-      }}>
+      <Note>
         The arc drawn is the great circle between the two airports — the
         shortest path over the sphere, which is why it bows north on a flat
         map. Filed routes bend around weather, winds and closed airspace, and
         are not public.
-      </div>
+      </Note>
     </Shell>
   )
 }
