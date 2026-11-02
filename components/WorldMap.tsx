@@ -226,6 +226,29 @@ const GLOBE_PIXELS = 360_000
 const TAP_SLOP_PX = 24
 
 /**
+ * What each layer is, said once.
+ *
+ * The tabs carry a title attribute, which is a tooltip nobody on a touch
+ * screen will ever see and most people on a desktop will not wait for. So
+ * the first time a layer is opened in a session it says what it is, and
+ * then gets out of the way.
+ *
+ * Each line leads with the limit rather than the feature, because on these
+ * three layers the limit is the thing a reader would otherwise get wrong:
+ * ships are bursts of listening and not a census, wide views of the sky are
+ * a sample around a few airports, and the alert layer is machine-coded news
+ * rather than verified incidents.
+ */
+const LAYER_INTRO: Partial<Record<Layer, string>> = {
+  shipping: 'Lanes and chokepoints, with every ship heard by AIS in the last quarter of an hour. Tap a strait, a lane or a ship.',
+  flights: 'Live transponder positions. Zoom in for everything flying; wider views sample the busiest hubs and the military feed.',
+  conflict: 'Violence and unrest machine-coded from world news by GDELT — reports of incidents, not verified ones, and no casualty counts.',
+}
+
+/** How long the line stays before it gets out of the way. */
+const INTRO_MS = 9000
+
+/**
  * The small status line each live layer puts in a corner of the map.
  *
  * One component rather than three near-identical blocks, which is partly
@@ -427,6 +450,8 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   // this changes with every pull and every pan, and costs nothing to do.
   const [hubReadings, setHubReadings] = useState<Map<string, HubReading>>(new Map())
   const [events, setEvents] = useState<ConflictEvent[]>([])
+  // Which layer's one-line explanation is currently showing, if any.
+  const [intro, setIntro] = useState<Layer | null>(null)
   // How long ago the open event was reported. Ticked in an effect rather than
   // read during render, because the clock is not a pure function and this
   // repo lints reading one while rendering as an error.
@@ -1519,6 +1544,45 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   }, [picked])
 
   /**
+   * Shows a layer's one-line explanation the first time it is opened.
+   *
+   * Once per layer per session: a note that reappeared on every switch
+   * would be worse than no note. Both state changes happen inside timers
+   * rather than in the effect body, which this repo lints as an error and
+   * which would cascade a second render on every layer change besides.
+   *
+   * The first version left the line showing when you came back. Leaving a
+   * layer cancels its hide timer, so `intro` stayed set to that layer, and
+   * returning to it matched again and painted the line a second time. So
+   * every layer change now schedules a decision either way — show this
+   * layer's line, or clear whatever the last one left behind.
+   */
+  useEffect(() => {
+    const line = LAYER_INTRO[layer]
+    const key = `worldpulse:intro:${layer}`
+
+    let seen = true
+    if (line) {
+      try {
+        seen = sessionStorage.getItem(key) === 'seen'
+      } catch {
+        // A blocked store is not a reason to withhold the explanation; it
+        // only means it may be shown again next session.
+        seen = false
+      }
+    }
+
+    const show = window.setTimeout(() => {
+      if (!line || seen) { setIntro(null); return }
+      setIntro(layer)
+      try { sessionStorage.setItem(key, 'seen') } catch { /* see above */ }
+    }, 0)
+    const hide = window.setTimeout(() => setIntro(null), INTRO_MS)
+
+    return () => { window.clearTimeout(show); window.clearTimeout(hide) }
+  }, [layer])
+
+  /**
    * Keeps the events current while the conflict layer is open.
    *
    * Slower than the other two on purpose: GDELT publishes every fifteen
@@ -1737,6 +1801,35 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           <span>Map</span>
         </button>
       </div>
+      )}
+
+      {/* ── WHAT THIS LAYER IS ──
+          Centred under the country-news card, which is the one band across
+          the top that is free at every width: the card is left-aligned and
+          410px on a desktop and full-width on a phone, so sitting beside it
+          works on one and not the other, and sitting below it works on both.
+          Not clickable — it leaves on its own. */}
+      {intro && intro === layer && LAYER_INTRO[layer] && (
+        <div
+          role="status"
+          style={{
+            position: 'absolute', zIndex: 205,
+            top: isCompact ? '101px' : '129px',
+            left: '50%', transform: 'translateX(-50%)',
+            width: isCompact ? 'calc(100% - 32px)' : 'min(520px, calc(100vw - 64px))',
+            padding: '11px 15px', borderRadius: '12px',
+            border: '1px solid var(--border-mid)',
+            background: 'rgba(8,8,12,.9)',
+            backdropFilter: 'blur(16px)',
+            boxShadow: 'var(--shadow-lg)',
+            color: 'var(--text-3)',
+            fontSize: '13px', lineHeight: 1.5, textAlign: 'center',
+            pointerEvents: 'none',
+            animation: 'story-fade .3s ease',
+          }}
+        >
+          {LAYER_INTRO[layer]}
+        </div>
       )}
 
       {/* ── FLEET NOTE ──
