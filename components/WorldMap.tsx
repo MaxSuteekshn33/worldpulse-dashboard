@@ -421,6 +421,8 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   const eventsRef = useRef<ConflictEvent[]>([])
   const conflictOverlayRef = useRef<(google.maps.OverlayView & { redraw: () => void }) | null>(null)
   const conflictMemoryRef = useRef(0)
+  // Where the keyboard has got to in the current layer's list of marks.
+  const stepIndex = useRef(-1)
   // The sky's standing geography: the hubs and the corridors between them.
   // Unlike the aircraft, these exist before any fetch and survive every one.
   const hubRef = useRef<Map<string, HubMarker>>(new Map())
@@ -1339,6 +1341,66 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     })
   }
 
+  /**
+   * The current canvas layer's marks, in the order a keyboard steps them.
+   *
+   * Ordered by what is worth reaching first rather than by whatever the feed
+   * returned, because stepping is linear and nobody is going to press the
+   * arrow key four hundred times: the biggest ships, the military aircraft,
+   * the most widely reported events.
+   */
+  function stepList(): { id: string; label: string; lat: number; lon: number }[] {
+    if (layerRef.current === 'shipping') {
+      return [...vesselsRef.current]
+        .sort((a, b) => (b.length ?? 0) - (a.length ?? 0) || b.speed - a.speed)
+        .map(v => ({
+          id: `ship:${v.mmsi}`,
+          label: `${v.name}${v.kind ? `, ${v.kind}` : ''}`,
+          lat: v.lat, lon: v.lon,
+        }))
+    }
+    if (layerRef.current === 'flights') {
+      return [...aircraftRef.current]
+        .sort((a, b) => Number(b.military) - Number(a.military) || (b.altitude ?? 0) - (a.altitude ?? 0))
+        .map(a => ({
+          id: `plane:${a.hex}`,
+          label: `${a.callsign ?? a.hex.toUpperCase()}${a.military ? ', military' : ''}`,
+          lat: a.lat, lon: a.lon,
+        }))
+    }
+    if (layerRef.current === 'conflict') {
+      return [...eventsRef.current]
+        .sort((a, b) => b.articles - a.articles)
+        .map(e => ({ id: `event:${e.id}`, label: `${e.kind}, ${e.place}`, lat: e.lat, lon: e.lon }))
+    }
+    return []
+  }
+
+  /**
+   * Moves the keyboard selection along the list and opens that mark.
+   *
+   * Pans the flat map to whatever it lands on, because a selection you
+   * cannot see is only half an answer — the panel would describe something
+   * off the edge of the screen. The globe is left where it is: it turns
+   * under its own clock and wrestling it to a point mid-step would be worse
+   * than leaving the panel to do the describing.
+   */
+  function stepBy(delta: number) {
+    const list = stepList()
+    if (!list.length) return
+
+    const next = (stepIndex.current + delta + list.length) % list.length
+    stepIndex.current = next
+    const mark = list[next]
+
+    const [kind, value] = mark.id.split(':')
+    if (kind === 'ship') setPicked({ kind: 'ship', mmsi: Number(value) })
+    else if (kind === 'plane') setPicked({ kind: 'plane', hex: value })
+    else setPicked({ kind: 'event', id: value })
+
+    if (viewRef.current === 'map') mapRef.current?.panTo({ lat: mark.lat, lng: mark.lon })
+  }
+
   /** Whichever markers the current layer puts on the globe. */
   function activeMarkers(): Map<string, GlobeMarker> {
     // Nothing: the flights layer has no globe. It is only ever reached here
@@ -1852,6 +1914,36 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           <span>Map</span>
         </button>
       </div>
+      )}
+
+      {/* ── KEYBOARD ACCESS TO THE CANVAS LAYERS ──
+          The country bubbles are DOM and have had a roving tabindex from the
+          start. The ships, aircraft and events are strokes on a canvas, so
+          until now there was nothing for Tab to reach and no way to read
+          them without a pointer at all.
+
+          One control rather than one node per mark: there can be twelve
+          hundred ships, and a thousand focusable elements would be a worse
+          answer than none. It steps along an ordered list with the arrow
+          keys, opens each mark's panel as it goes — which is real DOM, and
+          is what a screen reader then reads — and pans the map to keep what
+          is selected on screen. */}
+      {(layer === 'shipping' || layer === 'flights' || layer === 'conflict') && (
+        <button
+          type="button"
+          className="canvas-step"
+          onClick={() => stepBy(1)}
+          onKeyDown={e => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); stepBy(1) }
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); stepBy(-1) }
+            else if (e.key === 'Escape') { stepIndex.current = -1; setPicked(null) }
+          }}
+        >
+          {layer === 'shipping' ? 'Step through the ships'
+            : layer === 'flights' ? 'Step through the aircraft'
+            : 'Step through the events'}
+          <span style={{ color: 'var(--text-4)' }}>{'  ·  arrow keys, Esc to clear'}</span>
+        </button>
       )}
 
       {/* ── WHAT THIS LAYER IS ──
