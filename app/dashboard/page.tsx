@@ -13,7 +13,7 @@ import CountUp from '@/components/CountUp'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
 import { SOURCE_COUNT } from '@/lib/sources'
-import { useIsCompact } from '@/lib/useMediaQuery'
+import { useIsCompact, useIsNarrow } from '@/lib/useMediaQuery'
 import { googleMapsUrl } from '@/lib/loadGoogleMaps'
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false })
@@ -46,6 +46,8 @@ export default function Dashboard() {
   // here rather than a lookup.
   const mapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ''
   const isCompact = useIsCompact()
+  // The tabs keep their labels longer than the rest of the compact layout.
+  const isNarrow = useIsNarrow()
   // Which question the map is answering. Lives here because both the tabs and
   // the map need it, and switching must not remount either.
   const [layer, setLayer] = useState<Layer>('news')
@@ -114,7 +116,7 @@ export default function Dashboard() {
         </div>
 
         <div style={{ marginLeft: isCompact ? '12px' : '26px' }}>
-          <LayerTabs value={layer} onChange={setLayer} compact={isCompact} />
+          <LayerTabs value={layer} onChange={setLayer} compact={isNarrow} />
         </div>
       </header>
 
