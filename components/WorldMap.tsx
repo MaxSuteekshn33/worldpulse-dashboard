@@ -409,6 +409,21 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   }, [picked])
   const router = useRouter()
   const isCompact = useIsCompact()
+
+  /**
+   * Where the layer's corner note sits.
+   *
+   * Top right on a desktop, which is empty map there. On a phone it is not:
+   * the country-news card spans nearly the full width, and measured at
+   * 375x812 the note landed at y74-108 inside the card's y70-143 and sat on
+   * top of its label. So on a narrow screen the note moves to the bottom
+   * right instead, above the footer — the one band of map that nothing else
+   * claims. The view switch keeps the matching corner on the left, and the
+   * two do not meet: the switch ends at x84 and the note starts past x110.
+   */
+  const noteCorner = isCompact
+    ? { bottom: 'calc(var(--safe-bottom) + 156px)', right: '16px' }
+    : { top: '18px', right: '18px' }
   // Stable: NavTransition memoises it on the router, so naming it as a
   // dependency below doesn't rebuild 200 markers.
   const navigate = useSoftNav()
@@ -1634,8 +1649,11 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         style={{
           position: 'absolute', zIndex: 210,
           left: isCompact ? '16px' : 'calc(24px + var(--safe-left))',
+          // Lifted clear of the footer on a phone. The legend wraps onto
+          // three lines there, which makes the footer 143px tall, and the
+          // switch was overlapping its last 39 pixels.
           bottom: isCompact
-            ? 'calc(104px + var(--safe-bottom))'
+            ? 'calc(156px + var(--safe-bottom))'
             : 'calc(78px + var(--safe-bottom))',
         }}
       >
@@ -1671,7 +1689,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           className="mono-label"
           style={{
             position: 'absolute', zIndex: 210,
-            top: '18px', right: '18px',
+            ...noteCorner,
             padding: '8px 13px', borderRadius: '10px',
             border: '1px solid var(--border-mid)',
             background: 'rgba(8,8,12,.84)',
@@ -1697,7 +1715,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           className="mono-label"
           style={{
             position: 'absolute', zIndex: 210,
-            top: '18px', right: '18px',
+            ...noteCorner,
             padding: '8px 13px', borderRadius: '10px',
             border: '1px solid var(--border-mid)',
             background: 'rgba(8,8,12,.84)',
@@ -1729,7 +1747,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           className="mono-label"
           style={{
             position: 'absolute', zIndex: 210,
-            top: '18px', right: '18px',
+            ...noteCorner,
             padding: '8px 13px', borderRadius: '10px',
             border: '1px solid var(--border-mid)',
             background: 'rgba(8,8,12,.84)',
