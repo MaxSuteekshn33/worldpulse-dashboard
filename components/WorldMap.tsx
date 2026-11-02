@@ -6,6 +6,7 @@ import { Globe as GlobeIcon, Map as MapIcon } from 'lucide-react'
 import { useIsCompact } from '@/lib/useMediaQuery'
 import { useSoftNav } from '@/components/NavTransition'
 import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
+import { readMapUrl, writeMapUrl } from '@/lib/mapUrl'
 import { loadTerrain } from '@/lib/globe'
 import { CHOKEPOINTS } from '@/lib/chokepoints'
 import type { Layer } from '@/components/LayerTabs'
@@ -570,9 +571,27 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     loadGoogleMaps(apiKey).then(() => {
       if (!mapContainer.current || cancelled) return
 
+      /**
+       * The camera, from the address bar if it says anything.
+       *
+       * Read directly rather than through the hook: this runs inside the
+       * map's own setup, before there is anything to re-render, and a
+       * subscription here would only invite the map to rebuild itself every
+       * time it wrote its own position back.
+       */
+      const opening = readMapUrl()
+      const start = opening.lat !== null && opening.lng !== null
+        ? { lat: opening.lat, lng: opening.lng }
+        : { lat: 25, lng: 12 }
+      // Clamped to the same range the map allows, so a hand-edited or stale
+      // link cannot ask for a zoom the map will refuse.
+      const startZoom = opening.zoom === null
+        ? 2.4
+        : Math.max(2, Math.min(7, opening.zoom))
+
       const map = new google.maps.Map(mapContainer.current, {
-        center: { lat: 25, lng: 12 },
-        zoom: 2.4,
+        center: start,
+        zoom: startZoom,
         minZoom: 2,
         maxZoom: 7,
         styles: DARK_STYLE,
@@ -595,9 +614,38 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       // only stops that being a white rectangle — it still leaves the reader
       // looking at nothing. The placeholder clears on the real signal rather
       // than a guessed timeout.
+      /**
+       * Writes the camera back whenever the map settles.
+       *
+       * On `idle` rather than on every frame of a drag: idle fires once the
+       * movement has stopped, which is exactly the granularity a shareable
+       * link wants and keeps this from rewriting the URL sixty times a
+       * second. Rounded, because three decimals of latitude is about a
+       * hundred metres and nobody is sharing a link to more precision than
+       * the map can show.
+       */
+      map.addListener('idle', () => {
+        const centre = map.getCenter()
+        const zoom = map.getZoom()
+        if (!centre || zoom === undefined) return
+        writeMapUrl({
+          lat: centre.lat().toFixed(3),
+          lng: centre.lng().toFixed(3),
+          z: String(Math.round(zoom * 100) / 100),
+        })
+      })
+
       google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
         if (cancelled) return
         setTilesIn(true)
+
+        // A link that asked for the globe gets the globe, once there is a
+        // map under it to hand the markers over from. Not on the flights
+        // layer, which has no globe at all — a stale link naming one should
+        // land on the flat map rather than on nothing.
+        if (opening.view === 'globe' && layerRef.current !== 'flights') {
+          void switchTo('globe')
+        }
 
         // Bring the bubbles in only once there is a map under them; arriving
         // over a blank panel just looks like a glitch.
@@ -1654,6 +1702,9 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     }
 
     setView(next)
+    // The map is the default, so it is written as the absence of the
+    // parameter rather than as `view=map`.
+    writeMapUrl({ view: next === 'globe' ? 'globe' : null })
     busyRef.current = false
   }
 

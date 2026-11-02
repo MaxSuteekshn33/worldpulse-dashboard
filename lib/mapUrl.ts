@@ -40,6 +40,14 @@ function num(raw: string | null): number | null {
   return Number.isFinite(v) ? v : null
 }
 
+/**
+ * A one-off read, for callers outside React's render — the map's own setup,
+ * which needs the camera before there is anything to re-render.
+ */
+export function readMapUrl(): MapUrlState {
+  return read()
+}
+
 function read(): MapUrlState {
   if (typeof window === 'undefined') return EMPTY
   const q = new URLSearchParams(window.location.search)
