@@ -568,6 +568,19 @@ button:active, [role="button"]:active { opacity: .85; }
   box-shadow: 0 10px 28px rgba(0, 0, 0, .45);
 }
 
+/* A landscape phone is 375px tall, and the chrome does not all fit: header,
+   country-news card, this control and the footer legend come to more than
+   the viewport. Measured at 812x375 this control ran from y105 to y219 and
+   sat on top of the card at y70-143, covering its search icon.
+
+   Laid out as a row on a short viewport rather than a column, which takes it
+   from 114px tall to about 44px and puts it back in the gap between the card
+   and the footer. The labels stay — side by side there is room for them. */
+@media (max-height: 460px) {
+  .view-switch { flex-direction: row; }
+  .view-switch button { flex-direction: row; gap: 7px; width: auto; padding: 9px 12px; }
+}
+
 .view-switch button {
   display: flex;
   flex-direction: column;
