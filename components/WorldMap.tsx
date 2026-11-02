@@ -1649,12 +1649,24 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         style={{
           position: 'absolute', zIndex: 210,
           left: isCompact ? '16px' : 'calc(24px + var(--safe-left))',
-          // Lifted clear of the footer on a phone. The legend wraps onto
-          // three lines there, which makes the footer 143px tall, and the
-          // switch was overlapping its last 39 pixels.
+          /**
+           * Lifted clear of the footer, which is taller than this offset was
+           * written for on both sizes.
+           *
+           * The footer carries the layer's legend, so its height depends on
+           * the layer: measured at 1440x900 it is 50px on news and flights
+           * and 83px on shipping and the alert layer, where the legend has
+           * more in it — and the switch, sitting at 78, had its bottom five
+           * pixels under the legend strip on exactly those two. On a phone
+           * the legend wraps onto three lines, making the footer 143px, and
+           * the overlap was 39px.
+           *
+           * One value per size rather than one per layer: the control must
+           * not move when you change tabs.
+           */
           bottom: isCompact
             ? 'calc(156px + var(--safe-bottom))'
-            : 'calc(78px + var(--safe-bottom))',
+            : 'calc(96px + var(--safe-bottom))',
         }}
       >
         <button
