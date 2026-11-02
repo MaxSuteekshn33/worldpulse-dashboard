@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic'
 // Cross-fades when the destination is prerendered; a plain navigation
 // otherwise, so on-demand pages still show their skeleton at once.
 import Link from '@/components/FastLink'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import CountryPanel from '@/components/CountryPanel'
 import LayerTabs, { type Layer } from '@/components/LayerTabs'
 import ShippingLegend from '@/components/ShippingLegend'
@@ -14,6 +14,7 @@ import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
 import { SOURCE_COUNT } from '@/lib/sources'
 import { useIsCompact, useIsNarrow } from '@/lib/useMediaQuery'
+import { useMapUrl, writeMapUrl } from '@/lib/mapUrl'
 import { googleMapsUrl } from '@/lib/loadGoogleMaps'
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false })
@@ -26,6 +27,9 @@ const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false })
  * its own, because the map is what they came for.
  */
 const CTA_MS = 8000
+
+/** The layers a `?layer=` value is allowed to name. */
+const LAYERS: Layer[] = ['news', 'shipping', 'flights', 'conflict']
 
 function Stat({ value, label }: { value: number; label: string }) {
   return (
@@ -50,7 +54,26 @@ export default function Dashboard() {
   const isNarrow = useIsNarrow()
   // Which question the map is answering. Lives here because both the tabs and
   // the map need it, and switching must not remount either.
-  const [layer, setLayer] = useState<Layer>('news')
+  /**
+   * The open layer *is* the address bar — there is no second copy of it in
+   * React state to fall out of step with the URL.
+   *
+   * Read through `useSyncExternalStore`, the same way this app reads media
+   * queries, so the server and the first client render agree: the server
+   * cannot see a query string, so it renders the news tab, and the store
+   * corrects it on hydration. A lazy `useState` initialiser reading
+   * `window` would instead hand React a different tab on each side.
+   *
+   * `news` is the default and so is written as the absence of the
+   * parameter, which keeps a plain `/dashboard` link clean.
+   */
+  const fromUrl = useMapUrl()
+  const layer: Layer = LAYERS.includes(fromUrl.layer as Layer)
+    ? (fromUrl.layer as Layer)
+    : 'news'
+
+  const setLayer = (next: Layer) => writeMapUrl({ layer: next === 'news' ? null : next })
+
   const navHeight = 56
 
   useEffect(() => {
