@@ -152,11 +152,32 @@ export default function CountryPanel({ introMs = 0 }: { introMs?: number }) {
         }}
       />
 
+      {/*
+        The wrapper must not be a hit target itself.
+
+        Its two states overlap: the expanded card is in normal flow and the
+        collapsed pill is absolutely positioned over it, so the wrapper is
+        always as tall as the *expanded* card even while the small pill is
+        the only thing you can see. Transparent is not the same as absent —
+        a box with `pointer-events: auto` swallows clicks whether or not
+        anything is painted in it — so that invisible area was eating taps
+        meant for the map underneath.
+
+        Measured on a 375x812 phone: 343x412, 46% of the screen, with 61 of
+        the 98 countries then on screen unreachable. That is the whole of
+        "the dots are not clickable on mobile". It was always there on the
+        desktop too, just out in an empty corner of a much wider map where
+        nothing was behind it to miss.
+
+        Each state turns pointer events back on for itself; the hidden one
+        is `visibility: hidden` and so takes none regardless.
+      */}
       <div ref={rootRef} style={{
         position: 'absolute', zIndex: 200,
         top: `calc(${navHeight}px + var(--safe-top) + ${isCompact ? '14px' : '42px'})`,
         left: isCompact ? '16px' : 'calc(26px + var(--safe-left))',
         width: isCompact ? 'calc(100% - 32px)' : 'min(410px, calc(100vw - 52px))',
+        pointerEvents: 'none',
       }}>
 
         {/* ── COLLAPSED: the rectangle that says what is behind it ── */}
@@ -171,7 +192,7 @@ export default function CountryPanel({ introMs = 0 }: { introMs?: number }) {
             padding: '15px 17px', borderRadius: '14px',
             background: 'var(--panel-bg)', border: '1px solid var(--border-mid)',
             backdropFilter: 'blur(18px)', boxShadow: 'var(--shadow-lg)',
-            cursor: 'pointer', textAlign: 'left',
+            cursor: 'pointer', textAlign: 'left', pointerEvents: 'auto',
             transform: showing ? 'translateX(-118%)' : 'translateX(0)',
             opacity: showing ? 0 : 1,
             visibility: showing ? 'hidden' : 'visible',
@@ -215,6 +236,7 @@ export default function CountryPanel({ introMs = 0 }: { introMs?: number }) {
             borderRadius: '18px',
             background: 'var(--panel-bg)', border: '1px solid var(--border-mid)',
             backdropFilter: 'blur(22px)', boxShadow: 'var(--shadow-lg)',
+            pointerEvents: 'auto',
             // Deliberately not a scroll container. The search renders its
             // results in an absolutely positioned list that hangs below the
             // field, and any overflow setting here clips it to the card — a

@@ -215,6 +215,36 @@ const MARKER_TRANSITION = 'opacity .45s ease, transform .55s cubic-bezier(.2,1.2
 const GLOBE_PIXELS = 360_000
 
 /**
+ * How far from a country's bubble a tap still counts as that country.
+ *
+ * Twenty-four pixels, roughly a fingertip's radius and the same order as the
+ * tolerances the ship, aircraft and event layers already use. Wide enough
+ * that a phone tap lands, narrow enough not to reach past a neighbour: the
+ * nearest bubble wins, so where two are close the tap goes to whichever is
+ * actually nearer rather than the first one checked.
+ */
+const TAP_SLOP_PX = 24
+
+/**
+ * A note on the zoom, so the next person does not repeat the experiment.
+ *
+ * A phone opens on roughly a quarter of the world and cannot pull back to
+ * see the rest: `zoom: 2.4` and `minZoom: 2` below are fixed, and the world
+ * only fits a 375px screen at about zoom 0.55.
+ *
+ * Fitting the zoom to the viewport was tried and reverted. Two things fight
+ * it. `strictBounds` means the viewport may never show outside the latitude
+ * restriction, which on a tall screen forces a zoom near 2 whatever
+ * `minZoom` says — that is where the 2 came from. And with the bounds
+ * relaxed so the zoom could actually drop, Google stopped firing
+ * `tilesloaded` at 0.55 and the map sat on its loading placeholder with
+ * four tiles fetched and nothing drawn.
+ *
+ * So this wants a real device and a careful look at low fractional zooms,
+ * not a one-line change. Left alone deliberately.
+ */
+
+/**
  * What the flights layer is showing, and what it had to ask for to show it.
  *
  * `full` means every aircraft in the viewport, which is only possible where
@@ -579,6 +609,11 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           dot.style.transform = 'translate(-50%,-50%) scale(1)'
         })
         el.addEventListener('click', e => { e.stopPropagation(); open() })
+        // There is no hover on a touchscreen, so without this the prefetch
+        // above never happens on a phone and every tap pays the cold render
+        // in full. `pointerdown` fires for a finger as well as a mouse, and
+        // it lands before the tap completes.
+        el.addEventListener('pointerdown', warm)
 
         // Focus gets the same treatment as hover, so a keyboard user can see
         // and read where they are instead of inferring it from a ring.
@@ -642,6 +677,41 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         }
         overlay.onRemove = function () { el.parentNode?.removeChild(el) }
         overlay.setMap(map)
+      })
+
+      /**
+       * Opens the nearest country to a tap that missed its bubble.
+       *
+       * The bubbles are 24px boxes, which a mouse hits easily and a finger
+       * does not: a fingertip covers around 10mm, the dot inside the box is
+       * a few pixels across, and on a phone the whole world is 375px wide.
+       * Reported as the dots simply not being clickable on a phone, and the
+       * giveaway was that the other three layers do not have the problem —
+       * ships, aircraft and events have each had a handler like this one
+       * since they were built, and the countries, which came first, never
+       * got one.
+       *
+       * The bubble's own click still handles a direct hit and stops the
+       * event, so this only ever runs for a near miss and the two cannot
+       * both fire.
+       */
+      map.addListener('click', (e: google.maps.MapMouseEvent) => {
+        if (layerRef.current !== 'news' || !e.latLng) return
+
+        const lat = e.latLng.lat()
+        const lng = e.latLng.lng()
+        // Tolerance in pixels, converted for the current zoom, so the target
+        // stays the same size under the finger however far in you are.
+        const perDeg = (256 * Math.pow(2, map.getZoom() ?? 3)) / 360
+        let within = TAP_SLOP_PX / perDeg
+
+        let code: string | null = null
+        for (const [id, m] of markersRef.current) {
+          const d = Math.hypot(m.lat - lat, (m.lng - lng) * Math.cos((lat * Math.PI) / 180))
+          if (d < within) { within = d; code = id }
+        }
+
+        if (code) navigate(`/country/${code}`)
       })
 
       refreshPulse()
@@ -1480,13 +1550,32 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         ref={globeStage}
         onClick={e => {
           if (viewRef.current !== 'globe') return
-          if (layerRef.current !== 'shipping' && layerRef.current !== 'conflict') return
+          const live = layerRef.current
+          if (live !== 'shipping' && live !== 'conflict' && live !== 'news') return
           const globe = globeRef.current
           const stage = globeStage.current
           if (!globe || !stage) return
           const box = stage.getBoundingClientRect()
           const x = e.clientX - box.left
           const y = e.clientY - box.top
+
+          if (live === 'news') {
+            // The same near-miss rescue the flat map now has, for the same
+            // reason: a 24px bubble is a mouse target, not a finger one, and
+            // on the globe it is also a moving one. The bubble's own click
+            // handles a direct hit and stops there, so this runs only for a
+            // tap that missed.
+            let near: string | null = null
+            let nearD = TAP_SLOP_PX
+            for (const [id, m] of markersRef.current) {
+              const p = globe.project(m.lat, m.lng)
+              if (!p.front) continue
+              const d = Math.hypot(p.x - x, p.y - y)
+              if (d < nearD) { nearD = d; near = id }
+            }
+            if (near) navigate(`/country/${near}`)
+            return
+          }
 
           if (layerRef.current === 'conflict') {
             // Screen space, as the ships are: near the limb two events a
