@@ -44,9 +44,6 @@ import { laneTraffic } from '@/lib/laneInfo'
 import { describeLane } from '@/lib/laneInfo'
 import { ChokepointDetail, LaneDetail, ShipDetail } from '@/components/SeaDetail'
 import { AircraftDetail, CorridorDetail, HubDetail } from '@/components/SkyDetail'
-import ConflictDetail from '@/components/ConflictDetail'
-import type { ConflictEvent } from '@/lib/conflict'
-import { createConflictOverlay, drawEvents } from '@/lib/conflictLayer'
 import { type AirHub, CORRIDORS, HUBS, HUB_BY_ID, arcMiles } from '@/lib/airways'
 import { type HubReading, readHubs } from '@/lib/airspace'
 import {
@@ -243,7 +240,6 @@ const TAP_SLOP_PX = 24
 const LAYER_INTRO: Partial<Record<Layer, string>> = {
   shipping: 'Lanes and chokepoints, with every ship heard by AIS in the last quarter of an hour. Tap a strait, a lane or a ship.',
   flights: 'Live transponder positions. Zoom in for everything flying; wider views sample the busiest hubs and the military feed.',
-  conflict: 'Violence and unrest machine-coded from world news by GDELT — reports of incidents, not verified ones, and no casualty counts.',
 }
 
 /** How long the line stays before it gets out of the way. */
@@ -258,10 +254,9 @@ const INTRO_MS = 9000
  * sitting in the wrong corner on a phone.
  *
  * `waiting` dims it and is used before a layer has any data. That state is
- * the reason this exists: opening shipping, flights or the alert layer used
- * to show an untouched map for as long as the first fetch took — up to
- * fifteen seconds on a cold conflict sweep — with nothing anywhere saying
- * that something was on its way.
+ * the reason this exists: opening shipping or flights used to show an
+ * untouched map for as long as the first fetch took, with nothing anywhere
+ * saying that something was on its way.
  */
 function CornerNote({ text, waiting, place }: {
   text: string
@@ -416,11 +411,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   const fetchedRef = useRef(0)
   // Which quantized circle was last asked for, so panning inside it is free.
   const scopeRef = useRef<string>('')
-  // The conflict layer, built the first time it is asked for and kept after.
-  const conflictRef = useRef(false)
-  const eventsRef = useRef<ConflictEvent[]>([])
-  const conflictOverlayRef = useRef<(google.maps.OverlayView & { redraw: () => void }) | null>(null)
-  const conflictMemoryRef = useRef(0)
   // Where the keyboard has got to in the current layer's list of marks.
   const stepIndex = useRef(-1)
   // The sky's standing geography: the hubs and the corridors between them.
@@ -452,14 +442,8 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   // Worked out from the aircraft already on screen rather than fetched, so
   // this changes with every pull and every pan, and costs nothing to do.
   const [hubReadings, setHubReadings] = useState<Map<string, HubReading>>(new Map())
-  const [events, setEvents] = useState<ConflictEvent[]>([])
   // Which layer's one-line explanation is currently showing, if any.
   const [intro, setIntro] = useState<Layer | null>(null)
-  // How long ago the open event was reported. Ticked in an effect rather than
-  // read during render, because the clock is not a pure function and this
-  // repo lints reading one while rendering as an error.
-  const [eventAgeMin, setEventAgeMin] = useState<number | null>(null)
-  const [unrest, setUnrest] = useState<{ count: number; memory: number } | null>(null)
   const [picked, setPicked] = useState<
     | { kind: 'choke'; id: string }
     | { kind: 'ship'; mmsi: number }
@@ -467,7 +451,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     | { kind: 'plane'; hex: string }
     | { kind: 'hub'; id: string }
     | { kind: 'corridor'; ref: CorridorRef }
-    | { kind: 'event'; id: string }
     | null
   >(null)
   const trailsRef = useRef<Trails>(new Map())
@@ -919,15 +902,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         }
         const scale = Math.max(0.55, radius / 240)
 
-        if (layerRef.current === 'conflict') {
-          drawEvents(
-            ctx, place, eventsRef.current, scale,
-            Date.now(), conflictMemoryRef.current,
-            pickedRef.current?.kind === 'event' ? pickedRef.current.id : undefined,
-          )
-          return
-        }
-
         if (layerRef.current !== 'shipping') return
         const lane = pickedRef.current?.kind === 'lane' ? pickedRef.current.ref : null
         drawLanesOnGlobe(ctx, project, radius, lane)
@@ -1315,56 +1289,12 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     }
   }
 
-  /** The event nearest a point, within a tolerance in degrees. */
-  function nearestEvent(lat: number, lon: number, within: number): ConflictEvent | null {
-    let best: ConflictEvent | null = null
-    let bestD = within
-    for (const e of eventsRef.current) {
-      const d = Math.hypot(e.lat - lat, (e.lon - lon) * Math.cos((lat * Math.PI) / 180))
-      if (d < bestD) { bestD = d; best = e }
-    }
-    return best
-  }
-
-  /**
-   * Builds the conflict layer once: the canvas overlay and the click handling.
-   *
-   * The simplest of the three. There is no standing geography to draw — a
-   * conflict map has no equivalent of a shipping lane or an air corridor that
-   * could be stated without taking a position on whose territory is whose —
-   * so everything on this layer is an event, and every event comes from the
-   * feed.
-   */
-  function ensureConflict(map: google.maps.Map) {
-    if (conflictRef.current) return
-    conflictRef.current = true
-
-    conflictOverlayRef.current = createConflictOverlay(
-      map,
-      () => eventsRef.current,
-      () => ({
-        active: layerRef.current === 'conflict',
-        clock: Date.now(),
-        memory: conflictMemoryRef.current,
-        selected: pickedRef.current?.kind === 'event' ? pickedRef.current.id : undefined,
-      }),
-    )
-
-    map.addListener('click', (e: google.maps.MapMouseEvent) => {
-      if (layerRef.current !== 'conflict' || !e.latLng) return
-      const perDeg = (256 * Math.pow(2, map.getZoom() ?? 3)) / 360
-      const found = nearestEvent(e.latLng.lat(), e.latLng.lng(), 16 / perDeg)
-      setPicked(found ? { kind: 'event', id: found.id } : null)
-    })
-  }
-
   /**
    * The current canvas layer's marks, in the order a keyboard steps them.
    *
    * Ordered by what is worth reaching first rather than by whatever the feed
    * returned, because stepping is linear and nobody is going to press the
-   * arrow key four hundred times: the biggest ships, the military aircraft,
-   * the most widely reported events.
+   * arrow key four hundred times: the biggest ships, the military aircraft.
    */
   function stepList(): { id: string; label: string; lat: number; lon: number }[] {
     if (layerRef.current === 'shipping') {
@@ -1384,11 +1314,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           label: `${a.callsign ?? a.hex.toUpperCase()}${a.military ? ', military' : ''}`,
           lat: a.lat, lon: a.lon,
         }))
-    }
-    if (layerRef.current === 'conflict') {
-      return [...eventsRef.current]
-        .sort((a, b) => b.articles - a.articles)
-        .map(e => ({ id: `event:${e.id}`, label: `${e.kind}, ${e.place}`, lat: e.lat, lon: e.lon }))
     }
     return []
   }
@@ -1412,8 +1337,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
 
     const [kind, value] = mark.id.split(':')
     if (kind === 'ship') setPicked({ kind: 'ship', mmsi: Number(value) })
-    else if (kind === 'plane') setPicked({ kind: 'plane', hex: value })
-    else setPicked({ kind: 'event', id: value })
+    else setPicked({ kind: 'plane', hex: value })
 
     if (viewRef.current === 'map') mapRef.current?.panTo({ lat: mark.lat, lng: mark.lon })
   }
@@ -1425,8 +1349,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     // back to the flat map, and handing the globe a set of hubs to place in
     // that gap would flash them across it.
     if (layerRef.current === 'flights') return new Map()
-    // The conflict layer is entirely canvas: every mark on it is an event.
-    if (layerRef.current === 'conflict') return new Map()
     return layerRef.current === 'shipping'
       ? new Map([...chokeRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
       : new Map([...markersRef.current].map(([k, m]) => [k, { box: m.box, lat: m.lat, lng: m.lng }]))
@@ -1445,7 +1367,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     const news = layer === 'news'
     const shipping = layer === 'shipping'
     const flights = layer === 'flights'
-    const conflict = layer === 'conflict'
 
     ;(async () => {
       // The sky is a flat-map layer only.
@@ -1462,7 +1383,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
 
       if (shipping) await ensureShipping(map)
       if (flights) ensureFlights(map)
-      if (conflict) ensureConflict(map)
       if (cancelled) return
 
       // A pick on one layer means nothing on another — a chokepoint on the
@@ -1494,7 +1414,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       // long enough to see the other layer's marks on this one.
       flightOverlayRef.current?.redraw()
       vesselOverlayRef.current?.redraw()
-      conflictOverlayRef.current?.redraw()
 
       globeRef.current?.setMarkers(activeMarkers())
       globeRef.current?.refresh()
@@ -1659,58 +1578,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     }
   }, [layer, view])
 
-  useEffect(() => {
-    const id = picked?.kind === 'event' ? picked.id : null
-    if (!id) return
-    const at = eventsRef.current.find(e => e.id === id)?.at
-    if (!at) return
-    const tick = () => setEventAgeMin(Math.round((Date.now() - at) / 60000))
-    const soon = window.setTimeout(tick, 0)
-    const timer = window.setInterval(tick, 30_000)
-    return () => { window.clearTimeout(soon); window.clearInterval(timer) }
-  }, [picked])
-
-  /**
-   * Rebuilds the globe when the stage changes shape.
-   *
-   * Turning a phone over is the case this exists for. Nothing in the app
-   * locks orientation — there is no manifest and no `screen.orientation`
-   * call — so the browser has always been free to rotate, and the flat map,
-   * the layout and the media queries all follow. The globe did not: it was
-   * built once at whatever size the stage happened to be and never asked
-   * again, so a rotation left a portrait-shaped sphere on a landscape screen
-   * with every bubble placed against a circle that had moved.
-   *
-   * A `ResizeObserver` rather than a `resize` listener, because the stage
-   * can change without the window doing so, and a rotation is only the
-   * loudest example.
-   *
-   * Debounced on a timer rather than an animation frame. The first version
-   * used `requestAnimationFrame` and was caught not rebuilding at all:
-   * frames do not come to a page the browser is not drawing, so the rebuild
-   * sat queued and the globe kept its old shape. This is the same trap the
-   * dashboard's opening animation fell into, and the same answer — a clock
-   * runs whether or not anything is being painted.
-   */
-  useEffect(() => {
-    const stage = globeStage.current
-    if (!stage || typeof ResizeObserver === 'undefined') return
-
-    let timer = 0
-    const observer = new ResizeObserver(() => {
-      window.clearTimeout(timer)
-      timer = window.setTimeout(() => {
-        const globe = globeRef.current
-        if (!globe) return
-        const size = globeSize(stage)
-        globe.resize(size.width, size.height, size.fit)
-      }, 80)
-    })
-
-    observer.observe(stage)
-    return () => { window.clearTimeout(timer); observer.disconnect() }
-  }, [])
-
   /**
    * Shows a layer's one-line explanation the first time it is opened.
    *
@@ -1748,41 +1615,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
     const hide = window.setTimeout(() => setIntro(null), INTRO_MS)
 
     return () => { window.clearTimeout(show); window.clearTimeout(hide) }
-  }, [layer])
-
-  /**
-   * Keeps the events current while the conflict layer is open.
-   *
-   * Slower than the other two on purpose: GDELT publishes every fifteen
-   * minutes, so asking more often than every few minutes would be asking the
-   * same question of the same file.
-   */
-  useEffect(() => {
-    if (layer !== 'conflict') return
-    let cancelled = false
-
-    const pull = async () => {
-      try {
-        const res = await fetch('/api/conflict')
-        const data = await res.json()
-        if (cancelled) return
-        eventsRef.current = data.events ?? []
-        conflictMemoryRef.current = Number(data.memorySeconds) || 0
-        setEvents(eventsRef.current)
-        setUnrest({ count: eventsRef.current.length, memory: conflictMemoryRef.current })
-        conflictOverlayRef.current?.redraw()
-        globeRef.current?.refresh()
-      } catch {
-        if (!cancelled) setUnrest(u => u ?? { count: 0, memory: 0 })
-      }
-    }
-
-    pull()
-    const timer = window.setInterval(pull, 3 * 60 * 1000)
-    // Events do not move, so unlike the fleet and the sky there is nothing to
-    // carry forward between fetches — only the fade, which the globe's own
-    // clock already drives and the flat map picks up on its next redraw.
-    return () => { cancelled = true; window.clearInterval(timer) }
   }, [layer])
 
   /**
@@ -1850,7 +1682,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         onClick={e => {
           if (viewRef.current !== 'globe') return
           const live = layerRef.current
-          if (live !== 'shipping' && live !== 'conflict' && live !== 'news') return
+          if (live !== 'shipping' && live !== 'news') return
           const globe = globeRef.current
           const stage = globeStage.current
           if (!globe || !stage) return
@@ -1873,21 +1705,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
               if (d < nearD) { nearD = d; near = id }
             }
             if (near) navigate(`/country/${near}`)
-            return
-          }
-
-          if (layerRef.current === 'conflict') {
-            // Screen space, as the ships are: near the limb two events a
-            // continent apart sit a few pixels from each other.
-            let hit: ConflictEvent | null = null
-            let hitD = 16
-            for (const ev of eventsRef.current) {
-              const p = globe.project(ev.lat, ev.lon)
-              if (!p.front) continue
-              const d = Math.hypot(p.x - x, p.y - y)
-              if (d < hitD) { hitD = d; hit = ev }
-            }
-            setPicked(hit ? { kind: 'event', id: hit.id } : null)
             return
           }
 
@@ -1986,7 +1803,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           keys, opens each mark's panel as it goes — which is real DOM, and
           is what a screen reader then reads — and pans the map to keep what
           is selected on screen. */}
-      {(layer === 'shipping' || layer === 'flights' || layer === 'conflict') && (
+      {(layer === 'shipping' || layer === 'flights') && (
         <button
           type="button"
           className="canvas-step"
@@ -1997,9 +1814,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
             else if (e.key === 'Escape') { stepIndex.current = -1; setPicked(null) }
           }}
         >
-          {layer === 'shipping' ? 'Step through the ships'
-            : layer === 'flights' ? 'Step through the aircraft'
-            : 'Step through the events'}
+          {layer === 'shipping' ? 'Step through the ships' : 'Step through the aircraft'}
           <span style={{ color: 'var(--text-4)' }}>{'  ·  arrow keys, Esc to clear'}</span>
         </button>
       )}
@@ -2090,47 +1905,6 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
           }
         />
       )}
-
-      {/* ── UNREST NOTE ──
-          Says what the rings are and over what window, because a count of
-          events means nothing without one — three hundred events is a quiet
-          six hours or an extraordinary quarter of an hour. */}
-      {layer === 'conflict' && (
-        <CornerNote
-          place={noteCorner}
-          waiting={!unrest}
-          // The slowest of the three to arrive — a cold sweep pulls ninety
-          // minutes of fifteen-minute exports — so this is the one that most
-          // needed something to say while it works.
-          text={
-            !unrest
-              ? 'Reading the last few hours…'
-              // `memory` only arrives with a successful answer, so it is what
-              // separates a feed that failed from a window that genuinely
-              // held nothing. These were being reported as the same thing.
-              : !unrest.memory
-                ? 'Event feed unavailable'
-                : unrest.count
-                  ? `${unrest.count} reported events · last ${Math.round(unrest.memory / 3600)} h`
-                  : `Nothing reported in the last ${Math.round(unrest.memory / 3600)} h`
-          }
-        />
-      )}
-
-      {/* ── WHICH EVENT YOU CLICKED ── */}
-      {layer === 'conflict' && picked?.kind === 'event' && (() => {
-        const found = events.find(e => e.id === picked.id)
-        if (!found) return null
-        return (
-          <div style={{ position: 'absolute', zIndex: 220, right: '18px', top: '64px' }}>
-            <ConflictDetail
-              event={found}
-              ageMin={eventAgeMin}
-              onClose={() => setPicked(null)}
-            />
-          </div>
-        )
-      })()}
 
       {/* ── WHICH HUB YOU CLICKED ── */}
       {layer === 'flights' && picked?.kind === 'hub' && (() => {

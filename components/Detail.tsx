@@ -4,13 +4,12 @@ import { X } from 'lucide-react'
 /**
  * The shell every detail panel is built from.
  *
- * There are six of these panels across three layers — a chokepoint, a lane,
- * a ship, an aircraft, an air hub, a corridor, and an event — and they were
- * three separate files each with their own copy of the same row and the same
- * shell, with the conflict panel hand-rolling its header a third way. They
+ * There are six of these panels across two layers — a chokepoint, a lane, a
+ * ship, an aircraft, an air hub and a corridor — and they were separate
+ * files each with their own copy of the same row and the same shell. They
  * read as one family because they were written in one week, not because
  * anything made them one, and they had already started to drift: the same
- * caveat block appeared with three slightly different margins.
+ * caveat block appeared with several slightly different margins.
  *
  * Nothing here is new design. It is the shape they already had, in one
  * place, so that a change to the family is a change to the family.

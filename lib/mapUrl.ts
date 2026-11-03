@@ -12,13 +12,13 @@ import { useSyncExternalStore } from 'react'
  * Atlantic looking at the news.
  *
  * What goes in: the layer, the projection, and the camera. What stays out:
- * which ship or aircraft or event is selected. Those are identified by MMSI,
- * ICAO hex and GDELT id, all of which are real identifiers — but the things
- * they name have moved or aged out of the window within the hour, so a link
- * to one would be a link to an empty map and a panel that cannot open. The
- * chokepoints and air hubs are fixed and could be linked; they are left out
- * too, for now, so that the rule is simple and there is no second class of
- * link that works only sometimes.
+ * which ship or aircraft is selected. Those are identified by MMSI and ICAO
+ * hex, both real identifiers — but the things they name have moved or aged
+ * out of the window within the hour, so a link to one would be a link to an
+ * empty map and a panel that cannot open. The chokepoints and air hubs are
+ * fixed and could be linked; they are left out too, for now, so that the
+ * rule is simple and there is no second class of link that works only
+ * sometimes.
  */
 
 export interface MapUrlState {
