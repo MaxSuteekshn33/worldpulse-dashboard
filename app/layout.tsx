@@ -1,10 +1,39 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import NavTransition from '@/components/NavTransition'
+import ServiceWorker from '@/components/ServiceWorker'
 
 export const metadata: Metadata = {
   title: "WorldPulse — Live News Intelligence",
   description: "Track headlines, politics, world affairs, economy and finance across 200 countries — updated every 20 minutes.",
+  applicationName: "WorldPulse",
+  /**
+   * iOS does not read the web manifest for any of this. Installing from
+   * Safari's share sheet uses these tags instead, so without them an added
+   * icon falls back to a screenshot of the page and the app opens with
+   * Safari's chrome still around it.
+   */
+  appleWebApp: {
+    capable: true,
+    title: "WorldPulse",
+    // The status bar sits over the page, which is what the dark header and
+    // `viewportFit: cover` were already built for.
+    statusBarStyle: "black-translucent",
+  },
+  /**
+   * Next emits the standardised `mobile-web-app-capable`. Safari reads the
+   * Apple-prefixed name, and on iOS versions before the manifest's `display`
+   * was honoured that tag is the only thing that makes an installed site open
+   * without browser chrome. Harmless where it is ignored.
+   */
+  other: { 'apple-mobile-web-app-capable': 'yes' },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
@@ -38,7 +67,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body style={{ margin: 0 }}><NavTransition>{children}</NavTransition></body>
+      <body style={{ margin: 0 }}>
+        <NavTransition>{children}</NavTransition>
+        <ServiceWorker />
+      </body>
     </html>
   );
 }
