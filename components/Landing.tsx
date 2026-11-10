@@ -96,8 +96,25 @@ export default function Landing({ highlights }: { highlights: Highlight[] }) {
         position: 'relative', zIndex: 10, flex: 1,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'center', textAlign: 'center',
-        padding: `${isCompact ? '44px' : '56px'} 20px 40px`,
-        gap: '20px',
+        /**
+         * The rhythm, rather than one gap for everything.
+         *
+         * Every child here used to sit 20px from the next — the eyebrow, the
+         * headline, the sentence, the search and the link, all equally far
+         * apart. Equal spacing is what made this read flat: nothing was
+         * grouped with anything, so the eye had no order to follow. The
+         * spacing now says what belongs together — the pills are part of the
+         * headline and sit close to it, the sentence explains the headline,
+         * and the search is the thing you came to do, so it gets the widest
+         * gap of all.
+         *
+         * In `vh` with a `clamp` because this page is `minHeight: 100dvh`
+         * with `overflow: hidden`: anything that does not fit is not scrolled
+         * to, it is cut off and unreachable. Spacing that grows with the
+         * viewport can never push the search off a short screen.
+         */
+        padding: `clamp(30px, 6vh, 72px) 20px clamp(26px, 5vh, 48px)`,
+        gap: 0,
       }}>
         {/* Category pills */}
         <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -118,22 +135,30 @@ export default function Landing({ highlights }: { highlights: Highlight[] }) {
           ))}
         </div>
 
-        <h1 className="display-xl" style={{ maxWidth: '800px' }}>
+        <h1 className="display-xl" style={{ maxWidth: '820px', marginTop: 'clamp(15px, 2.3vh, 26px)' }}>
           The world is happening.
           <br />
           <span style={{ color: 'var(--accent)' }}>Track it live.</span>
         </h1>
 
         <p style={{
-          fontSize: isCompact ? '15px' : '16.5px', fontWeight: 450,
-          color: 'var(--text-2)', maxWidth: '520px', lineHeight: 1.55,
+          // A touch larger and looser, and a slightly wider measure: this is
+          // the only prose on the page and it was set tighter than the cards.
+          fontSize: isCompact ? '15px' : '17px', fontWeight: 450,
+          color: 'var(--text-2)', maxWidth: '548px', lineHeight: 1.6,
+          marginTop: 'clamp(13px, 1.8vh, 20px)',
         }}>
           Headlines, politics, world affairs, economy and finance —
           one focused page per country, refreshed every 20 minutes.
         </p>
 
         {/* Primary CTA */}
-        <div style={{ width: isCompact ? '100%' : 'min(520px, 92vw)', marginTop: '4px' }}>
+        <div style={{
+          width: isCompact ? '100%' : 'min(520px, 92vw)',
+          // The widest gap on the page, because this is the one thing the
+          // page is asking you to do.
+          marginTop: 'clamp(20px, 3.4vh, 36px)',
+        }}>
           <CountrySearch size={isCompact ? 'compact' : 'hero'} placeholder="Search a country to start…" />
         </div>
 
@@ -143,6 +168,7 @@ export default function Landing({ highlights }: { highlights: Highlight[] }) {
             display: 'inline-flex', alignItems: 'center', gap: '8px',
             fontSize: '14px', fontWeight: 600, color: 'var(--text-3)',
             textDecoration: 'none', letterSpacing: '-.01em',
+            marginTop: 'clamp(13px, 1.8vh, 18px)',
           }}
         >
           or explore the world map <ArrowRight size={14} strokeWidth={2.5} />
