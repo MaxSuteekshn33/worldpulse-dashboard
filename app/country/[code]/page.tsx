@@ -149,7 +149,7 @@ export default async function CountryPage(
         <div style={{
           position: 'absolute', inset: 0,
           maxWidth: '1280px', margin: '0 auto',
-          padding: '0 clamp(16px, 3vw, 28px) 26px',
+          padding: '0 clamp(16px, 3vw, 28px) clamp(28px, 3.5vw, 44px)',
           display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '12px' }}>
@@ -192,11 +192,22 @@ export default async function CountryPage(
           <section
             key={meta.id}
             id={meta.id}
-            style={{ scrollMarginTop: '120px', paddingTop: '34px' }}
+            /**
+             * Each category needs to read as its own block.
+             *
+             * At a flat 34px the five sections ran together — the gap
+             * between Politics and World was barely larger than the gap
+             * between a section's own title and its cards, so the page
+             * looked like one long list rather than five topics. Scaled with
+             * the viewport so a phone does not pay the full separation.
+             */
+            style={{ scrollMarginTop: '120px', paddingTop: 'clamp(38px, 5vw, 64px)' }}
           >
             <div style={{
               display: 'flex', alignItems: 'baseline', gap: '12px',
-              marginBottom: '16px', flexWrap: 'wrap',
+              // Room between a section's title and its cards, so the title
+              // belongs to what follows rather than floating between blocks.
+              marginBottom: 'clamp(16px, 1.8vw, 24px)', flexWrap: 'wrap',
             }}>
               <span style={{
                 width: '4px', height: '20px', borderRadius: '2px',

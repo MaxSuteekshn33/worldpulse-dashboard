@@ -58,7 +58,8 @@ export default function Landing({ highlights }: { highlights: Highlight[] }) {
         background: 'rgba(8,8,12,.6)',
         backdropFilter: 'blur(16px)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: `var(--safe-top) ${isCompact ? '16px' : '28px'} 0`,
+        // Matches the country pages and the dashboard; see the note there.
+        padding: `var(--safe-top) clamp(16px, 3vw, 28px) 0`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '13px' }}>
           <span style={{

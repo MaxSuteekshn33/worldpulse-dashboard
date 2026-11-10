@@ -126,7 +126,12 @@ export default function Dashboard() {
         borderBottom: '1px solid var(--border)',
         backdropFilter: 'blur(20px)',
         display: 'flex', alignItems: 'center',
-        padding: `var(--safe-top) ${isCompact ? '16px' : '28px'} 0`,
+        // The same fluid gutter the country pages use. These three headers
+        // sit at the same place on screen as you move between them, and two
+        // of them used to snap 16 to 28 at the breakpoint while the third
+        // scaled — so the margin jumped on navigation for no reason anyone
+        // could see.
+        padding: `var(--safe-top) clamp(16px, 3vw, 28px) 0`,
       }}
       // Named so the narrowest phones can tighten this row in CSS: at 320px
       // the wordmark and the four tabs together want 360px.
