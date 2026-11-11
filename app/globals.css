@@ -144,7 +144,7 @@ button:active, [role="button"]:active { opacity: .85; }
   color: var(--text);
 }
 .body-text {
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 450;
   line-height: 1.55;
   color: var(--text-2);
@@ -718,7 +718,7 @@ button:active, [role="button"]:active { opacity: .85; }
   background: none;
   color: var(--text-2);
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
 }
 

@@ -75,7 +75,7 @@ export default function SegmentNav({ counts }: { counts: Record<string, number> 
                 className="mono-meta"
                 style={{
                   color: isActive ? 'var(--text-3)' : 'var(--text-4)',
-                  fontSize: '10.5px',
+                  fontSize: '10px',
                 }}
               >
                 {n}

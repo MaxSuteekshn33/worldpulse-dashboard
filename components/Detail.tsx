@@ -62,7 +62,7 @@ export function Entry({ name, meta }: { name: React.ReactNode; meta: React.React
   return (
     <div style={{
       display: 'flex', justifyContent: 'space-between', gap: '12px',
-      padding: '3px 0', fontSize: '12.5px', color: 'var(--text-2)',
+      padding: '3px 0', fontSize: '13px', color: 'var(--text-2)',
     }}>
       <span style={{ fontWeight: 600 }}>{name}</span>
       <span style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{meta}</span>

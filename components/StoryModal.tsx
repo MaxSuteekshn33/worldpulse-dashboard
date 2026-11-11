@@ -219,7 +219,7 @@ export default function StoryModal({
 
         {article.description && (
           <p style={{
-            fontSize: '14.5px', fontWeight: 450, lineHeight: 1.62,
+            fontSize: '15px', fontWeight: 450, lineHeight: 1.62,
             color: 'var(--text-2)', marginBottom: '16px',
           }}>
             {article.description}
@@ -245,7 +245,7 @@ export default function StoryModal({
                 Free to read
               </span>
               <span style={{
-                fontSize: '13.5px', fontWeight: 600, color: 'var(--text)',
+                fontSize: '14px', fontWeight: 600, color: 'var(--text)',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 The same story on {freeRoute.source}
@@ -333,7 +333,7 @@ export default function StoryModal({
               marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '7px',
               padding: '10px 15px', borderRadius: '10px',
               background: 'var(--accent-soft)', border: '1px solid var(--accent-line)',
-              fontSize: '13.5px', fontWeight: 700, color: 'var(--accent-bright)',
+              fontSize: '14px', fontWeight: 700, color: 'var(--accent-bright)',
               textDecoration: 'none', whiteSpace: 'nowrap',
             }}
           >

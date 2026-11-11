@@ -84,7 +84,7 @@ export default function Landing({ highlights }: { highlights: Highlight[] }) {
             display: 'inline-flex', alignItems: 'center', gap: '7px',
             padding: '9px 15px', borderRadius: '9px',
             background: 'var(--surface-2)', border: '1px solid var(--border-mid)',
-            fontSize: '13.5px', fontWeight: 600, color: 'var(--text)',
+            fontSize: '14px', fontWeight: 600, color: 'var(--text)',
             textDecoration: 'none', letterSpacing: '-.01em',
           }}
         >
@@ -129,7 +129,7 @@ export default function Landing({ highlights }: { highlights: Highlight[] }) {
                 width: '5px', height: '5px', borderRadius: '50%',
                 background: s.color, display: 'inline-block',
               }} />
-              <span className="mono-label" style={{ color: 'var(--text-2)', fontSize: '9.5px' }}>
+              <span className="mono-label" style={{ color: 'var(--text-2)', fontSize: '10px' }}>
                 {s.label}
               </span>
             </div>

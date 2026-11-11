@@ -323,7 +323,7 @@ export default function CountryPanel({ introMs = 0 }: { introMs?: number }) {
                     display: 'flex', alignItems: 'center', gap: '6px',
                     padding: '6px 11px', borderRadius: '999px',
                     background: 'var(--surface-1)', border: '1px solid var(--border)',
-                    fontSize: '12.5px', fontWeight: 600, color: 'var(--text-2)',
+                    fontSize: '13px', fontWeight: 600, color: 'var(--text-2)',
                     letterSpacing: '-.01em', textDecoration: 'none',
                     transition: 'border-color .18s ease, color .18s ease',
                   }}

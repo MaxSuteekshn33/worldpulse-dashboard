@@ -100,7 +100,7 @@ export function ChokepointDetail({ point, reading, nearby, onClose }: {
           <div className="mono-label" style={{ color: 'var(--text-4)', marginBottom: '5px' }}>
             Mostly carries
           </div>
-          <div style={{ fontSize: '12.5px', color: 'var(--text-3)', lineHeight: 1.5 }}>
+          <div style={{ fontSize: '13px', color: 'var(--text-3)', lineHeight: 1.5 }}>
             {point.carries.join(' · ')}
           </div>
         </div>

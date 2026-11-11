@@ -89,7 +89,7 @@ export default function NewsCard({ article, color, onOpen, showImage = true }: P
 
         {article.description && (
           <p style={{
-            fontSize: '13.5px', fontWeight: 450, lineHeight: 1.5,
+            fontSize: '14px', fontWeight: 450, lineHeight: 1.5,
             color: 'var(--text-3)', margin: 0,
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
             overflow: 'hidden',

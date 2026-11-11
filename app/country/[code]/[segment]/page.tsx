@@ -182,7 +182,7 @@ export default async function SegmentPage({ params }: { params: Params }) {
             <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-2)' }}>
               No {meta.label.toLowerCase()} coverage for {country.name} right now
             </p>
-            <p style={{ fontSize: '13.5px', color: 'var(--text-4)', maxWidth: '430px' }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-4)', maxWidth: '430px' }}>
               None of our newsrooms have filed a matching story in the last few days.
               This page refreshes every {Math.round(REVALIDATE_SECONDS / 60)} minutes.
             </p>

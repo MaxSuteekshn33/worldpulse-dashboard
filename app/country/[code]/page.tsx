@@ -220,7 +220,7 @@ export default async function CountryPage(
               >
                 <h2 className="heading-md">{meta.label}</h2>
               </Link>
-              <span style={{ fontSize: '13.5px', fontWeight: 450, color: 'var(--text-3)' }}>
+              <span style={{ fontSize: '14px', fontWeight: 450, color: 'var(--text-3)' }}>
                 {meta.blurb}
               </span>
               {articles.length > PREVIEW && (
@@ -247,7 +247,7 @@ export default async function CountryPage(
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
               }}>
                 <Newspaper size={19} strokeWidth={2} color="var(--text-4)" />
-                <p style={{ fontSize: '14.5px', fontWeight: 500, color: 'var(--text-2)' }}>
+                <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-2)' }}>
                   {articles.length === 0
                     ? `No ${meta.label.toLowerCase()} coverage for ${country.name} right now`
                     : `Every ${meta.label.toLowerCase()} story is already above`}
