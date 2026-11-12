@@ -14,7 +14,7 @@
  */
 import { COUNTRY_TERMS, matchesCountry, SUPPORTED_CODES } from '../lib/aliases'
 import { COUNTRIES, getCountryByCode } from '../lib/countries'
-import { onTopic, relatedRank, sourceKey, spreadTopics, topicKey, type Article } from '../lib/news'
+import { onTopic, relatedRank, sourceKey, spreadTopics, topicKey, TOPIC_TERMS, type Article } from '../lib/news'
 import { SEGMENT_IDS, type Segment } from '../lib/segments'
 
 let failures = 0
@@ -163,6 +163,60 @@ check(
   'world keeps an international story with no desk flag at all',
   onTopic(article('Ambassador recalled as border treaty talks collapse', false), 'world'),
 )
+
+// Vocabulary false positives, each found by sampling live World sections.
+// A single generic term used to carry a whole story into World on its own.
+check(
+  'world drops an archaeology story ("occupation")',
+  !onTopic(article('Bronze leg found in Scottish bog sheds new light on Roman occupation'), 'world'),
+)
+check(
+  'world drops a remittances story ("overseas")',
+  !onTopic(article('Overseas Pakistanis send home $14.8bn in four months'), 'world'),
+)
+check(
+  'world drops a drug-trafficking arrest ("alliance")',
+  !onTopic(article('Bolivia arrests former judge on suspicion of drug trafficking alliance'), 'world'),
+)
+// `nuclear` alone was mostly domestic energy; only the security senses survive.
+check(
+  'world drops a nuclear POWER story',
+  !onTopic(article('Agency calls for stronger nuclear power oversight in Zambia'), 'world'),
+)
+check(
+  'world drops a reactor build',
+  !onTopic(article("South Africa's new nuclear build to be anchored on science"), 'world'),
+)
+check(
+  'world keeps nuclear SUBMARINES',
+  onTopic(article('Japan wants nuclear submarines, but can it overcome the obstacles?'), 'world'),
+)
+check(
+  'world keeps denuclearization talks',
+  onTopic(article('US says China agreed on talks to advance denuclearization'), 'world'),
+)
+check(
+  'world keeps nuclear weapons',
+  onTopic(article('Iran says it will never pursue nuclear weapons under the accord'), 'world'),
+)
+
+// Vocabulary hygiene. A term listed under two segments would make `onTopic`'s
+// `own >= best` tie meaningless — both sections would always score it equally
+// and both would claim it, which is the duplication this gate exists to stop.
+{
+  const owners = new Map<string, string[]>()
+  for (const [seg, terms] of Object.entries(TOPIC_TERMS)) {
+    const seen = new Set<string>()
+    const dups = terms.filter(t => seen.size === seen.add(t).size)
+    check(`${seg} vocabulary has no duplicate terms`, dups.length === 0)
+    for (const t of terms) owners.set(t, [...(owners.get(t) ?? []), seg])
+  }
+  const shared = [...owners.entries()].filter(([, segs]) => segs.length > 1)
+  check(
+    'no term is claimed by two segments',
+    shared.length === 0,
+  )
+}
 
 // Every segment id is routable.
 for (const id of SEGMENT_IDS) {

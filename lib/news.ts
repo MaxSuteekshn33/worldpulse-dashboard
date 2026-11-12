@@ -204,7 +204,7 @@ const REPUTABLE = new Set([
  * under Politics, not to adjudicate borderline cases — a section that gates too
  * hard goes empty, which is worse than one that is merely loose.
  */
-const TOPIC_TERMS: Record<Exclude<Segment, 'headline'>, string[]> = {
+export const TOPIC_TERMS: Record<Exclude<Segment, 'headline'>, string[]> = {
   politics: [
     'election', 'elections', 'electoral', 'vote', 'votes', 'voted', 'voting',
     'voter', 'voters', 'ballot', 'poll', 'polls', 'referendum', 'parliament',
@@ -228,12 +228,32 @@ const TOPIC_TERMS: Record<Exclude<Segment, 'headline'>, string[]> = {
     'negotiations', 'ceasefire', 'truce', 'war', 'warfare', 'conflict', 'military',
     'troops', 'soldiers', 'airstrike', 'airstrikes', 'missile', 'missiles',
     'drone', 'drones', 'border', 'borders', 'refugee', 'refugees',
-    'migration', 'migrants', 'humanitarian', 'sanctions', 'alliance',
+    'migration', 'migrants', 'humanitarian', 'sanctions',
     'peace', 'invasion', 'invade', 'hostage', 'hostages', 'delegation',
     'accord', 'pact', 'geopolitical', 'security council', 'peacekeeping',
-    'extradition', 'visa', 'deportation', 'deported', 'genocide', 'occupation',
-    'nuclear', 'defence', 'defense', 'envoy', 'overseas', 'airspace',
+    'extradition', 'visa', 'deportation', 'deported', 'genocide',
+    // `nuclear` on its own was mostly domestic ENERGY, not proliferation —
+    // measured solo matches were "South Africa's new nuclear build",
+    // "Pakistan's new nuclear plant", "Nuclear Power Oversight in Zambia",
+    // "clean energy's importance". Only the security senses belong to World;
+    // a reactor announcement is an Economy story.
+    'nuclear weapons', 'nuclear arsenal', 'nuclear submarine',
+    'nuclear submarines', 'nuclear talks', 'nuclear programme',
+    'nuclear proliferation', 'denuclearization', 'denuclearisation',
+    'defence', 'defense', 'envoy', 'airspace',
     'warship', 'warplane', 'insurgent', 'insurgents', 'militia',
+    // Removed as measured false-positive generators, each with a single hit in
+    // a 188-article sample and that hit wrong:
+    //   'occupation' -> "Bronze leg found in Scottish bog sheds new light on
+    //                    Roman occupation" (archaeology)
+    //   'alliance'   -> "Bolivia arrests former judge on suspicion of drug
+    //                    trafficking"
+    //   'overseas'   -> "Overseas Pakistanis send home $14.8bn in four
+    //                    months" (remittances — an Economy story)
+    // NOTE: 20 of the 67 world terms matched nothing in that sample
+    // (treaty, ceasefire, genocide, hostage, militia, ...). They were left in
+    // deliberately: a term that never fires costs no precision, and pruning
+    // real world vocabulary because one news cycle missed it is overfitting.
   ],
   economy: [
     'economy', 'economic', 'economist', 'economists', 'gdp', 'growth',
