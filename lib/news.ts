@@ -333,31 +333,31 @@ const DESK_PROVES_TOPIC: ReadonlySet<Segment> = new Set<Segment>([
   'finance',
 ])
 
-/**
- * Below this, a gated section is treated as having been cut too thin and the
- * ungated pool is used instead. A loose section beats an empty one: most of the
- * 200 countries are covered by a handful of stories at any moment, and gating
- * those away would leave their Economy and Finance tabs blank.
- */
-const MIN_GATED = 4
-
-/**
- * Sections that are never topped up from the ungated pool, however thin.
+/*
+ * NO SECTION IS EVER PADDED FROM THE UNGATED POOL. (Removed 2026-11-12.)
  *
- * The fallback trades precision for a full page, which is the right trade for a
- * subject desk: a thin Finance tab padded with general country news still reads
- * loosely as "this country's money". World is the one section where that trade
- * is incoherent, because the ungated pool IS the Headlines pool — padding World
- * from it doesn't loosen the section, it clones the section above.
+ * There used to be a `MIN_GATED = 4` fallback here: a section whose gate
+ * yielded fewer than four items was handed the whole ungated pool instead, on
+ * the theory that a loose section beats an empty one for the many countries
+ * covered by only a handful of stories at any moment.
  *
- * Measured on Brazil, whose World gate yields a single story: 11 of 12 World
- * items were also in Headlines, and the padding was Petrobras earnings, a
- * central-bank rate decision and an F1 driver's contract. None of that is world
- * news, so the full page was worth less than a short one. A short World section
- * is honest and already designed for — `app/country/[code]/page.tsx` renders
- * "No world coverage for X right now" with an explanation.
+ * The theory was wrong, because the ungated pool is the SAME pool Headlines
+ * draws from. Padding a thin section with it doesn't loosen that section, it
+ * reprints the section above. Tuvalu was the clearest case: its entire pool is
+ * 10 stories, and Politics, Economy AND Finance each returned all 10 — three
+ * tabs that were character-for-character the Headlines tab, so the country page
+ * collapsed all three into "Every <section> story is already above".
+ *
+ * Measured across 48 sections in 16 countries before removing it: 20 were being
+ * padded, and dropping the fallback left only 2 of the 48 empty (Tuvalu and
+ * Uruguay finance). Large countries were untouched — US/GB/IN/BR already clear
+ * the gate in every section. So the fallback was mostly manufacturing
+ * duplicates, and the empty case it was built to prevent is rare and already
+ * designed for: `app/country/[code]/page.tsx` renders "No <section> coverage
+ * for X right now" with an explanation of why.
+ *
+ * A short honest section beats a full misleading one. Don't reintroduce this.
  */
-const NEVER_PADDED: ReadonlySet<Segment> = new Set<Segment>(['world'])
 
 /**
  * Share of letters that are Latin. Google News search returns foreign-language
@@ -886,18 +886,15 @@ export async function getSegmentNews(
     return { ...a, alsoReportedBy: top }
   })
 
-  // Keep only items that actually belong in this section. When the gate leaves
-  // too little to fill a page the rest of the pool is added back, but on-topic
-  // items still rank above it — replacing the gated set outright, as this used
-  // to, handed Brazil a World section that was nothing but election coverage.
-  const gated = deduped.filter(a => onTopic(a, segment))
-  const inGate = new Set(gated)
-  const pool =
-    gated.length >= MIN_GATED || NEVER_PADDED.has(segment) ? gated : deduped
+  // Keep only items that actually belong in this section, and keep nothing
+  // else: a thin section renders thin. See the note on the removed MIN_GATED
+  // fallback above for why topping it up from the ungated pool reprinted
+  // Headlines instead of loosening the section.
+  const pool = deduped.filter(a => onTopic(a, segment))
 
+  // Everything here is on-topic now, so the old "gated items rank first" term
+  // in this comparator was always 0 and has been dropped with the fallback.
   const ranked = [...pool].sort((a, b) => {
-    const gate = Number(inGate.has(b)) - Number(inGate.has(a))
-    if (gate !== 0) return gate
     const diff = relevanceScore(b, code) - relevanceScore(a, code)
     if (diff !== 0) return diff
     return (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0)
