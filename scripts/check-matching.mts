@@ -132,15 +132,36 @@ for (const [headline, segment, want] of routing) {
   )
 }
 
-// A desk feed keeps an item no vocabulary recognises, but not one another
+// A SUBJECT desk keeps an item no vocabulary recognises, but not one another
 // section plainly owns.
 check(
-  'desk feed keeps an unrecognised story',
-  onTopic(article('Storm Austen leaves thousands without power', true), 'world'),
+  'politics desk keeps an unrecognised story',
+  onTopic(article('Storm Austen leaves thousands without power', true), 'politics'),
 )
 check(
   'desk feed still loses a story another section owns',
-  !onTopic(article('Chancellor unveils the budget and a new tax band', true), 'world'),
+  !onTopic(article('Stocks rally as the central bank signals a rate cut', true), 'politics'),
+)
+
+// ...but a WORLD desk is not a subject desk. "World" means "foreign to the
+// newsroom's own country", which on a page about a DIFFERENT country is no
+// evidence the story is international — every foreign World desk covers that
+// country's domestic news. This bypass was the main route by which general
+// copy reached World, and general copy is what Headlines is made of: Brazil's
+// World section came back 11-of-12 identical to its Headlines, padded with
+// Petrobras earnings and an F1 contract; Spain's was a rail-crash memorial, a
+// general strike and roosting house sparrows.
+check(
+  'world desk does NOT keep an unrecognised domestic story',
+  !onTopic(article('Storm Austen leaves thousands without power', true), 'world'),
+)
+check(
+  'world still keeps a genuinely international story from a desk',
+  onTopic(article('Ambassador recalled as border treaty talks collapse', true), 'world'),
+)
+check(
+  'world keeps an international story with no desk flag at all',
+  onTopic(article('Ambassador recalled as border treaty talks collapse', false), 'world'),
 )
 
 // Every segment id is routable.

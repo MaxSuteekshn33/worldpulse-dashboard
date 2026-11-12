@@ -307,8 +307,31 @@ export function onTopic(a: Article, segment: Segment): boolean {
   const best = Math.max(...TOPIC_SEGMENTS.map(s => topicScore(text, s)))
 
   if (own > 0) return own >= best
-  return a.fromDesk === true && best === 0
+  return a.fromDesk === true && best === 0 && DESK_PROVES_TOPIC.has(segment)
 }
+
+/**
+ * Sections where "it arrived on that desk" is evidence about the TOPIC.
+ *
+ * This is the whole bypass above, and `world` is deliberately absent. A
+ * newsroom's Politics or Economy desk is a subject desk: BBC Politics filing a
+ * story is real evidence the story is politics, even when the vocabulary misses
+ * it. A World desk is not a subject desk — it means "foreign to the newsroom's
+ * own country", which on a page about a DIFFERENT country is no evidence at all.
+ * Every foreign newsroom's World desk covers Canada's domestic news, so the
+ * bypass was waving untopical stories into Canada's World section: "Canadian
+ * Authorities Kill 4 Bears Involved in Deadly Attack on Hikers" (New York Times
+ * World, topic score 0) is a domestic story, not Canada's foreign affairs.
+ *
+ * 8 of the 13 `world` feeds are `desk: true`, so this bypass was the main way
+ * general-interest copy reached World — which is exactly the copy Headlines is
+ * made of, hence the duplication between the two.
+ */
+const DESK_PROVES_TOPIC: ReadonlySet<Segment> = new Set<Segment>([
+  'politics',
+  'economy',
+  'finance',
+])
 
 /**
  * Below this, a gated section is treated as having been cut too thin and the
@@ -317,6 +340,24 @@ export function onTopic(a: Article, segment: Segment): boolean {
  * those away would leave their Economy and Finance tabs blank.
  */
 const MIN_GATED = 4
+
+/**
+ * Sections that are never topped up from the ungated pool, however thin.
+ *
+ * The fallback trades precision for a full page, which is the right trade for a
+ * subject desk: a thin Finance tab padded with general country news still reads
+ * loosely as "this country's money". World is the one section where that trade
+ * is incoherent, because the ungated pool IS the Headlines pool — padding World
+ * from it doesn't loosen the section, it clones the section above.
+ *
+ * Measured on Brazil, whose World gate yields a single story: 11 of 12 World
+ * items were also in Headlines, and the padding was Petrobras earnings, a
+ * central-bank rate decision and an F1 driver's contract. None of that is world
+ * news, so the full page was worth less than a short one. A short World section
+ * is honest and already designed for — `app/country/[code]/page.tsx` renders
+ * "No world coverage for X right now" with an explanation.
+ */
+const NEVER_PADDED: ReadonlySet<Segment> = new Set<Segment>(['world'])
 
 /**
  * Share of letters that are Latin. Google News search returns foreign-language
@@ -851,7 +892,8 @@ export async function getSegmentNews(
   // to, handed Brazil a World section that was nothing but election coverage.
   const gated = deduped.filter(a => onTopic(a, segment))
   const inGate = new Set(gated)
-  const pool = gated.length >= MIN_GATED ? gated : deduped
+  const pool =
+    gated.length >= MIN_GATED || NEVER_PADDED.has(segment) ? gated : deduped
 
   const ranked = [...pool].sort((a, b) => {
     const gate = Number(inGate.has(b)) - Number(inGate.has(a))
