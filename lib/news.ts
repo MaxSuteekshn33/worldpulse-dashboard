@@ -469,6 +469,85 @@ const SAME_STORY = 0.6
 const RELATED_STORY = 0.42
 
 /**
+ * Query parameters that identify the FEED a link came from, not the article.
+ *
+ * Deutsche Welle publishes the same piece on its site-wide and world feeds and
+ * tags each with a different `maca` campaign id, so one article arrived as two
+ * URLs that differed only after the `?`. Every dedupe here keyed on the raw
+ * string, so the same DW story ran in Brazil's Headlines AND its World section:
+ *
+ *   .../a-79920780?maca=en-rss-en-all-1573-rdf     -> Headlines
+ *   .../a-79920780?maca=en-rss-en-world-4025-rdf   -> World
+ */
+const TRACKING_PARAMS = new Set([
+  'maca', 'ito', 'cmpid', 'cmp', 'fbclid', 'gclid', 'spm', 'smid', 'partner',
+  'ns_campaign', 'ns_mchannel', 'ns_source', 'ns_linkname', 'ns_fee',
+])
+
+/**
+ * The identity of an article's link, with feed/campaign noise removed.
+ *
+ * Used for comparison only — `Article.url` keeps whatever the publisher gave
+ * us, so the rendered link is never rewritten.
+ */
+export function canonicalUrl(raw: string): string {
+  try {
+    const u = new URL(raw)
+    for (const key of [...u.searchParams.keys()]) {
+      const k = key.toLowerCase()
+      if (k.startsWith('utm_') || k.startsWith('at_') || TRACKING_PARAMS.has(k)) {
+        u.searchParams.delete(key)
+      }
+    }
+    u.hash = ''
+    u.pathname = u.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '') || '/'
+    return u.toString()
+  } catch {
+    return raw.trim()
+  }
+}
+
+/**
+ * Tracks the stories a page has already put on screen.
+ *
+ * A country page shows Headlines first and the four sections below it as the
+ * detail, so a story that led Headlines must not reappear halfway down. That
+ * check used to be raw URL equality, which missed the same story twice over:
+ *
+ *  1. one article under two URLs that differ only by a feed tag (see
+ *     `canonicalUrl` above — Brazil ran a DW story in two sections);
+ *  2. one article under two genuinely different URLs — France showed the same
+ *     New York Times piece once as a Google News redirect wrapper and once as
+ *     the direct nytimes.com link. No amount of URL cleaning catches that, so
+ *     the headline has to be compared too.
+ *
+ * `SAME_STORY` is reused rather than invented: it is already the threshold for
+ * "this is the same copy" inside a section, and is strict enough that two
+ * distinct stories on one subject stay well clear of it (measured ~0.14).
+ */
+export function createShownStories() {
+  const urls = new Set<string>()
+  const seenTokens: Set<string>[] = []
+  return {
+    has(a: Article): boolean {
+      if (urls.has(canonicalUrl(a.url))) return true
+      const tokens = storyTokens(a.headline)
+      // Short headlines carry too little signal to risk a similarity match,
+      // the same guard the in-section clustering uses.
+      return (
+        tokens.size >= 4 &&
+        seenTokens.some(prev => jaccard(tokens, prev) >= SAME_STORY)
+      )
+    },
+    add(a: Article): void {
+      urls.add(canonicalUrl(a.url))
+      const tokens = storyTokens(a.headline)
+      if (tokens.size >= 4) seenTokens.push(tokens)
+    },
+  }
+}
+
+/**
  * Normalised newsroom identity, used to cap how much of a section one outlet
  * takes. Syndication networks publish the same piece under per-edition names —
  * "Investing.com", "Investing.com UK", "Investing.com India" — which read as
@@ -841,8 +920,11 @@ export async function getSegmentNews(
   const related: RelatedReport[][] = []
 
   for (const a of english) {
-    if (seenUrl.has(a.url)) continue
-    seenUrl.add(a.url)
+    // Canonical, not raw: the same article can arrive from two of a
+    // publisher's feeds carrying different campaign tags.
+    const key = canonicalUrl(a.url)
+    if (seenUrl.has(key)) continue
+    seenUrl.add(key)
 
     // Very short headlines carry too little signal for a similarity test, so
     // they stand alone rather than risk being folded into the wrong story.

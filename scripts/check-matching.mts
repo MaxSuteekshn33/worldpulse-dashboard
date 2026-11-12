@@ -14,7 +14,7 @@
  */
 import { COUNTRY_TERMS, matchesCountry, SUPPORTED_CODES } from '../lib/aliases'
 import { COUNTRIES, getCountryByCode } from '../lib/countries'
-import { onTopic, relatedRank, sourceKey, spreadTopics, topicKey, TOPIC_TERMS, type Article } from '../lib/news'
+import { canonicalUrl, createShownStories, onTopic, relatedRank, sourceKey, spreadTopics, topicKey, TOPIC_TERMS, type Article } from '../lib/news'
 import { SEGMENT_IDS, type Segment } from '../lib/segments'
 
 let failures = 0
@@ -199,6 +199,40 @@ check(
   'world keeps nuclear weapons',
   onTopic(article('Iran says it will never pursue nuclear weapons under the accord'), 'world'),
 )
+
+// ── On-page duplicates ────────────────────────────────────────────────────
+// Both causes found by diffing rendered headlines on the live country pages.
+{
+  const withUrl = (headline: string, url: string): Article => ({ ...article(headline), url })
+  const DW = 'Brazil electoral court fines Meta, sees no deliberate election bias'
+
+  // 1. One article, two feed tags. These differ only after the "?".
+  const a1 = withUrl(DW, 'https://www.dw.com/en/brazil-electoral-court-fines-meta/a-79920780?maca=en-rss-en-all-1573-rdf')
+  const a2 = withUrl(DW, 'https://www.dw.com/en/brazil-electoral-court-fines-meta/a-79920780?maca=en-rss-en-world-4025-rdf')
+  check('canonicalUrl strips feed campaign tags', canonicalUrl(a1.url) === canonicalUrl(a2.url))
+  check('canonicalUrl strips utm_*', canonicalUrl('https://x.com/a?utm_source=rss&id=7') === canonicalUrl('https://x.com/a?id=7'))
+  check('canonicalUrl keeps meaningful params', canonicalUrl('https://x.com/a?id=7') !== canonicalUrl('https://x.com/a?id=8'))
+
+  const sieve1 = createShownStories()
+  sieve1.add(a1)
+  check('a page will not show the same article under two feed tags', sieve1.has(a2))
+
+  // 2. Two genuinely different URLs for one story — a Google News redirect
+  //    wrapper and the publisher's own link. Only the headline can catch this.
+  const MUSEUM = 'A Museum’s ‘Wanted’ Poster Campaign Brings Looted Painting Back to France'
+  const direct = withUrl(MUSEUM, 'https://www.nytimes.com/2026/11/11/world/europe/france-art-wanted-poster.html')
+  const viaGoogle = withUrl(MUSEUM, 'https://news.google.com/rss/articles/CBMigwFBVV95cUxOR1NzdXZUMFFN?oc=5')
+  const sieve2 = createShownStories()
+  sieve2.add(direct)
+  check('a page will not show one story via two different URLs', sieve2.has(viaGoogle))
+
+  // ...but genuinely different stories must still both appear.
+  const other = withUrl(
+    'France summons Iranian ambassador over refrigeration cyberattack',
+    'https://www.nytimes.com/2026/11/11/world/europe/france-iran-cyber.html',
+  )
+  check('two distinct stories are not collapsed', !sieve2.has(other))
+}
 
 // Vocabulary hygiene. A term listed under two segments would make `onTopic`'s
 // `own >= best` tie meaningless — both sections would always score it equally

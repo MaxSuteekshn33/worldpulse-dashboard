@@ -6,7 +6,7 @@ import type { Metadata } from 'next'
 import { ArrowLeft, ArrowRight, Newspaper } from 'lucide-react'
 import { FEATURED_CODES, getCountryByCode, getCountryZoom } from '@/lib/countries'
 import { SEGMENTS } from '@/lib/segments'
-import { getSegmentNews, REVALIDATE_SECONDS } from '@/lib/news'
+import { createShownStories, getSegmentNews, REVALIDATE_SECONDS } from '@/lib/news'
 import CountryMapBg from '@/components/CountryMapBg'
 import CountrySearch from '@/components/CountrySearch'
 import StoryDeck from '@/components/StoryDeck'
@@ -76,10 +76,10 @@ export default async function CountryPage(
    * still better than repeating: the heading never stands over nothing, and
    * "see all" is right there for the full list.
    */
-  const shown = new Set<string>()
+  const shown = createShownStories()
   const previews = results.map(({ articles }) => {
-    const preview = articles.filter(a => !shown.has(a.url)).slice(0, PREVIEW)
-    for (const a of preview) shown.add(a.url)
+    const preview = articles.filter(a => !shown.has(a)).slice(0, PREVIEW)
+    for (const a of preview) shown.add(a)
     return preview
   })
 
