@@ -197,9 +197,10 @@ export default function StoryModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
+            className="story-close"
             style={{
               marginLeft: 'auto', display: 'grid', placeItems: 'center',
-              width: '30px', height: '30px', borderRadius: '8px',
+              borderRadius: '8px',
               background: 'var(--surface-1)', border: '1px solid var(--border)',
               color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0,
             }}
@@ -310,6 +311,7 @@ export default function StoryModal({
             onClick={onPrev}
             disabled={!onPrev}
             aria-label="Previous story"
+            className="story-nav"
             style={navStyle(!onPrev)}
           >
             <ChevronLeft size={16} strokeWidth={2.5} />
@@ -319,6 +321,7 @@ export default function StoryModal({
             onClick={onNext}
             disabled={!onNext}
             aria-label="Next story"
+            className="story-nav"
             style={navStyle(!onNext)}
           >
             <ChevronRight size={16} strokeWidth={2.5} />
@@ -349,7 +352,7 @@ export default function StoryModal({
 function navStyle(disabled: boolean): React.CSSProperties {
   return {
     display: 'grid', placeItems: 'center',
-    width: '32px', height: '32px', borderRadius: '9px',
+    borderRadius: '9px',
     background: 'var(--surface-1)', border: '1px solid var(--border)',
     color: disabled ? 'var(--text-4)' : 'var(--text-2)',
     opacity: disabled ? 0.45 : 1,

@@ -361,6 +361,31 @@ button:active, [role="button"]:active { opacity: .85; }
   }
 }
 
+/**
+ * The story sheet's icon buttons, which `.tap-44` cannot help.
+ *
+ * Close was 30x30 and the two story arrows 32x32 — small in BOTH directions,
+ * where `.tap-44` only grows height and deliberately never grows sideways.
+ * And the arrows sit 9px apart, so centring an invisible 44px box on each
+ * would have them overlap by 3px and quietly steal each other's taps, which
+ * on a story navigator is the worst possible failure: you press back and go
+ * forward.
+ *
+ * So these grow for real on a touch screen. They are icon buttons, not type,
+ * so size is not carrying any meaning here — and because the row is flex, the
+ * 9px gap is preserved rather than eaten, with no chance of overlap.
+ *
+ * Sized here rather than inline in StoryModal because an inline style would
+ * win over the media query.
+ */
+.story-close { width: 30px; height: 30px; }
+.story-nav { width: 32px; height: 32px; }
+
+@media (pointer: coarse) {
+  .story-close,
+  .story-nav { width: 44px; height: 44px; }
+}
+
 /* ---- The country opening sequence ----
  *
  * One timeline, 3.0s, the same for every country, and the caller holds the
