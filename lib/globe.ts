@@ -29,6 +29,31 @@ export const DEFAULT_TILT = 18
 /** Past this the view tips over its own pole. */
 export const MAX_TILT = 80
 
+/**
+ * How close the camera can come, as a multiple of the resting radius.
+ *
+ * Bounded by what this renderer costs, not by taste. Every frame walks every
+ * pixel of the visible disc doing two inverse trig calls, so the bill grows
+ * with the square of the radius until the disc covers the frame, after which
+ * the frame caps it — but by then the frame is the whole cost, and that is
+ * already too much. Measured on a 900x400 backing store (a 168px radius and
+ * ~89k pixels at rest), turning the globe:
+ *
+ *     zoom   fps   frames >40ms   worst frame
+ *     1.0     60        0            36ms
+ *     1.45    37        60           51ms
+ *     1.9     27        83           71ms
+ *     3.0     14        69          115ms
+ *
+ * 2 is where this stops. The renderer aims at 30fps and 1.9x still holds 27,
+ * which reads as a smooth turn; 3x does not, and it is blurry besides —
+ * `loadTerrain` samples the map at 1024px wide, so past about 2x the limit
+ * stops being the frame rate and becomes the texture, and the sphere goes
+ * visibly blocky. Raising this means fixing both, not just this number.
+ */
+export const MIN_ZOOM = 1
+export const MAX_ZOOM = 2
+
 /** Direction the sun comes from, in view space. Fixed, so shading is too. */
 const LIGHT: [number, number, number] = [-0.42, 0.44, 0.79]
 
@@ -55,15 +80,20 @@ export interface GlobeGeometry {
  * to mean rebuilding a table of latitudes and longitudes, and now it means
  * rotating these vectors.
  */
-export function buildGlobe(w: number, h: number): GlobeGeometry {
+export function buildGlobe(w: number, h: number, zoom = 1): GlobeGeometry {
   const cx = w / 2
   const cy = h / 2
-  const radius = Math.min(w, h) * GLOBE_FILL
+  const radius = Math.min(w, h) * GLOBE_FILL * Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom))
 
   // Sized to the disc, not the frame: a circle of that radius is around a
   // tenth of the frame, and allocating for the frame would waste most of
   // several megabytes.
-  const cap = Math.ceil(Math.PI * radius * radius) + 8
+  //
+  // Capped at the frame as well, because zooming in makes the disc larger
+  // than the stage. The scan below is already clipped to the canvas, so the
+  // pixels beyond it are never written — without this cap a 3x zoom would
+  // allocate for a circle most of which cannot be seen.
+  const cap = Math.min(Math.ceil(Math.PI * radius * radius), w * h) + 8
   const at = new Int32Array(cap)
   const vx = new Float32Array(cap)
   const vy = new Float32Array(cap)

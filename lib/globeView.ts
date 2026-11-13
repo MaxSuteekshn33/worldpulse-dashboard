@@ -19,6 +19,8 @@ import {
   DEFAULT_TILT,
   type GlobeGeometry,
   MAX_TILT,
+  MAX_ZOOM,
+  MIN_ZOOM,
   buildGlobe,
   drawGlobe,
   projectToScreen,
@@ -45,6 +47,26 @@ const TILT_PER_HEIGHT = 110
  * moved, so a press that does not move stays the marker's own click.
  */
 const DRAG_SLOP = 4
+
+/**
+ * How fast a wheel notch moves the camera, and how quickly it catches up.
+ *
+ * Zoom is held as a target the drawn zoom eases toward rather than applied
+ * straight to the geometry, for two reasons. A trackpad delivers a flick as
+ * dozens of small deltas, so applying each one directly would rebuild the
+ * pixel tables dozens of times for one gesture; and a step that lands
+ * instantly reads as a jump cut rather than as moving closer to something.
+ *
+ * `ZOOM_EASE` is the fraction of the remaining distance covered per frame.
+ * 0.18 at 30fps settles a full step in about a fifth of a second — fast
+ * enough to feel like a direct response, slow enough to read as motion.
+ */
+const ZOOM_PER_NOTCH = 0.0016
+const ZOOM_EASE = 0.18
+/** Below this the camera has arrived; snap and stop rebuilding. */
+const ZOOM_SETTLED = 0.002
+/** A step for the buttons and the keyboard, which have no delta of their own. */
+export const ZOOM_STEP = 0.45
 
 export interface GlobeMarker {
   box: HTMLElement
@@ -76,6 +98,15 @@ export interface GlobeViewHost {
    * its points rewritten each frame, and would still be a frame behind.
    */
   drawOverlay?: GlobeOverlay
+  /**
+   * Told whenever the camera distance changes, including by wheel and pinch.
+   *
+   * The page draws the two zoom buttons and has to grey them out at the
+   * stops, but the wheel moves the camera without the page being involved at
+   * all — so without this the buttons would only ever reflect the last press
+   * and would sit enabled at a limit the wheel had already reached.
+   */
+  onZoom?: (zoom: number) => void
 }
 
 export interface GlobeView {
@@ -92,6 +123,12 @@ export interface GlobeView {
   refresh(): void
   /** Rebuilds the sphere after the stage changes size — a rotation, mostly. */
   resize(width: number, height: number, fit: number): void
+  /** Moves the camera by `delta` zoom, for buttons and keys. Eased, clamped. */
+  zoomBy(delta: number): void
+  /** Back to the resting camera. */
+  resetZoom(): void
+  /** Current target zoom, so the page can disable a button at the stop. */
+  zoomLevel(): number
   run(): void
   stop(): void
   showMarkers(on: boolean): void
@@ -111,7 +148,11 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
   // screen, with every bubble placed against a circle that was no longer
   // where the circle was.
   let fit = host.fit
-  let geometry: GlobeGeometry | null = buildGlobe(canvas.width, canvas.height)
+  // How close the camera is, and where it is heading. `drawnZoom` is what the
+  // geometry was last built for; `zoom` is where the hand asked it to go.
+  let zoom = MIN_ZOOM
+  let drawnZoom = MIN_ZOOM
+  let geometry: GlobeGeometry | null = buildGlobe(canvas.width, canvas.height, drawnZoom)
   let frame: ImageData | null = ctx.createImageData(canvas.width, canvas.height)
 
   // The same circle in the units the markers are positioned in.
@@ -120,6 +161,25 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
   let cssRadius = geometry.radius / fit
   let cssW = canvas.width / fit
   let cssH = canvas.height / fit
+
+  /**
+   * Rebuilds the pixel tables for a new camera distance.
+   *
+   * Only the direction table depends on the radius; the terrain does not, so
+   * this is the same work a resize does and none of the expensive work a
+   * reload would. The frame buffer is reused — its size follows the canvas,
+   * not the disc — but it has to be cleared, because zooming OUT leaves the
+   * larger disc's pixels behind outside the smaller one.
+   */
+  function rebuildFor(next: number) {
+    if (!frame) return
+    drawnZoom = next
+    geometry = buildGlobe(canvas.width, canvas.height, drawnZoom)
+    frame.data.fill(0)
+    cssCx = geometry.cx / fit
+    cssCy = geometry.cy / fit
+    cssRadius = geometry.radius / fit
+  }
 
   let spin = 12
   let tilt = DEFAULT_TILT
@@ -191,7 +251,20 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
     const dt = last ? (now - last) / 1000 : 0
     last = now
 
-    if (!handled && !dragging && !hovering) spin += IDLE_SPIN * dt
+    // The camera closes on whatever the wheel last asked for. Rebuilding is
+    // the cost here, so it only happens while there is distance left to
+    // cover, and the last step snaps so this cannot idle a rebuild a frame
+    // forever on a rounding error.
+    if (drawnZoom !== zoom) {
+      const gap = zoom - drawnZoom
+      rebuildFor(Math.abs(gap) < ZOOM_SETTLED ? zoom : drawnZoom + gap * ZOOM_EASE)
+    }
+
+    // Held still while the hand is on it or over it, and while the camera is
+    // still moving — a globe that turns under you as you zoom reads as drift
+    // rather than as a camera move.
+    const zooming = drawnZoom !== zoom
+    if (!handled && !dragging && !hovering && !zooming) spin += IDLE_SPIN * dt
     draw()
     placeMarkers()
   }
@@ -242,12 +315,51 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
   function onPointerEnter() { hovering = true }
   function onPointerLeave() { hovering = false }
 
+  function setZoom(next: number) {
+    const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, next))
+    if (clamped === zoom) return
+    zoom = clamped
+    // Taking hold of the camera counts as handling it, the same as a drag —
+    // otherwise the idle turn resumes the moment the zoom settles and walks
+    // the globe off whatever was just brought closer.
+    handled = true
+    host.onZoom?.(zoom)
+  }
+
+  /**
+   * The wheel moves the camera rather than the page.
+   *
+   * `deltaY` is scaled rather than counted because the same gesture arrives
+   * in wildly different units: a mouse notch is ~100, a trackpad flick is a
+   * stream of single digits, and a pinch on a trackpad arrives here as a
+   * ctrl-held wheel. Scaling the delta treats all three as the same motion.
+   *
+   * Non-passive, because this has to preventDefault — the stage sits inside
+   * the page and a wheel over it would otherwise scroll the dashboard while
+   * also zooming, which is the worst of both.
+   */
+  function onWheel(e: WheelEvent) {
+    e.preventDefault()
+    // A pinch is reported as a wheel with ctrlKey set, and arrives in much
+    // smaller numbers than a notch for the same intent.
+    const delta = e.ctrlKey ? e.deltaY * 3 : e.deltaY
+    setZoom(zoom - delta * ZOOM_PER_NOTCH)
+  }
+
+  /** Double-click pulls the camera in a step, the way a map does. */
+  function onDoubleClick(e: MouseEvent) {
+    e.preventDefault()
+    setZoom(zoom + ZOOM_STEP)
+  }
+
   stage.addEventListener('pointerenter', onPointerEnter)
   stage.addEventListener('pointerleave', onPointerLeave)
   stage.addEventListener('pointerdown', onPointerDown)
   stage.addEventListener('pointermove', onPointerMove)
   stage.addEventListener('pointerup', onPointerUp)
   stage.addEventListener('pointercancel', onPointerUp)
+  stage.addEventListener('wheel', onWheel, { passive: false })
+  stage.addEventListener('dblclick', onDoubleClick)
 
   return {
     project(lat, lon) {
@@ -282,7 +394,10 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
       canvas.height = nextH
       fit = nextFit
 
-      geometry = buildGlobe(nextW, nextH)
+      // Rebuilt at the camera's current distance, not at rest: turning a
+      // phone over while zoomed in should not quietly pull the camera back.
+      drawnZoom = zoom
+      geometry = buildGlobe(nextW, nextH, drawnZoom)
       frame = ctx!.createImageData(nextW, nextH)
 
       cssCx = geometry.cx / fit
@@ -293,6 +408,18 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
 
       draw()
       placeMarkers()
+    },
+
+    zoomBy(delta) {
+      setZoom(zoom + delta)
+    },
+
+    resetZoom() {
+      setZoom(MIN_ZOOM)
+    },
+
+    zoomLevel() {
+      return zoom
     },
 
     run() {
@@ -327,6 +454,8 @@ export function createGlobeView(host: GlobeViewHost): GlobeView {
       stage.removeEventListener('pointermove', onPointerMove)
       stage.removeEventListener('pointerup', onPointerUp)
       stage.removeEventListener('pointercancel', onPointerUp)
+      stage.removeEventListener('wheel', onWheel)
+      stage.removeEventListener('dblclick', onDoubleClick)
       geometry = null
       frame = null
     },

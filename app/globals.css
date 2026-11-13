@@ -615,6 +615,63 @@ button:active, [role="button"]:active { opacity: .85; }
   outline-offset: 2px;
 }
 
+/**
+ * The globe's zoom pair.
+ *
+ * Deliberately the same glass, radius and border as `.view-switch` rather
+ * than a copy of Google's square white pair: these two sit on opposite sides
+ * of the same canvas, and reading as one family matters more than matching a
+ * control that is never on screen at the same time as this one.
+ */
+.globe-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 15px;
+  border: 1px solid var(--border-mid);
+  background: rgba(8, 8, 12, .84);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .45);
+}
+
+.globe-zoom button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 34px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color .2s ease, background .2s ease;
+}
+
+.globe-zoom button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+/* At a stop, say so rather than going on accepting presses that do nothing. */
+.globe-zoom button:disabled {
+  color: var(--text-4);
+  opacity: .45;
+  cursor: default;
+}
+
+.globe-zoom button:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+
+/* A landscape phone is short enough that a stacked pair crowds the footer;
+   the view switch already becomes a row there, so this does too. */
+@media (max-height: 460px) {
+  .globe-zoom { flex-direction: row; }
+}
+
 /* Held, the globe should say so. */
 .globe-stage:active { cursor: grabbing; }
 

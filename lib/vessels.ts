@@ -74,10 +74,21 @@ export const CAPTURE_MS = 30000
  *
  * The one case where somebody genuinely is waiting: a cold instance has no
  * fleet to show, so this capture happens before the answer. Kept short for
- * exactly that reason — it buys a sparse first paint, and the first refresh
- * behind the response fills it in.
+ * exactly that reason — it buys a sparse first paint, and the deep refresh
+ * scheduled behind the response fills it in.
+ *
+ * Measured on the deployment at 8000: the first `/api/vessels` from a cold
+ * instance took **9.7 seconds**, and the shipping tab sat on "LISTENING FOR
+ * VESSELS…" for all of it. Serverless instances are ephemeral and this
+ * dashboard is not busy, so cold is the common case rather than the rare one
+ * — that 9.7s was most people's first impression of the layer.
+ *
+ * 3500 because yield is close to linear (7s returned 52 vessels, 14s 86, 22s
+ * 144), so this still paints a sea with ships in it rather than an empty one,
+ * and the full-length capture now starts in `after` on the very same request
+ * instead of waiting for the next visitor 45 seconds later.
  */
-export const COLD_CAPTURE_MS = 8000
+export const COLD_CAPTURE_MS = 3500
 
 /**
  * How long a vessel stays on the map after it was last heard, in seconds.

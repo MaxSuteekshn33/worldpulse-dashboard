@@ -75,6 +75,14 @@ export async function GET() {
     // Nothing to show yet, so this one visitor does have to wait — but only
     // for the short window, because they are waiting on an empty sea.
     await refresh(key, COLD_CAPTURE_MS)
+    // ...and then deepen it straight away, behind the response.
+    //
+    // This was missing, and it quietly cost the cold path most of its value.
+    // A short first capture is only defensible because something longer
+    // follows it — but nothing did until the NEXT visitor arrived past the
+    // 45-second mark, and on a dashboard this quiet that can be a long while.
+    // So a cold instance kept serving its thin first capture to everyone.
+    after(() => refresh(key, CAPTURE_MS))
   } else if (Date.now() - cached.at >= VESSEL_REVALIDATE * 1000) {
     /**
      * Everyone after the first is answered immediately and the listening

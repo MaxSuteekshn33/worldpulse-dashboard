@@ -2,12 +2,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 // `Map` is aliased: this file is full of the JavaScript one.
-import { Globe as GlobeIcon, Map as MapIcon } from 'lucide-react'
+import { Globe as GlobeIcon, Map as MapIcon, Minus, Plus } from 'lucide-react'
 import { useIsCompact } from '@/lib/useMediaQuery'
 import { useSoftNav } from '@/components/NavTransition'
 import { loadGoogleMaps } from '@/lib/loadGoogleMaps'
 import { readMapUrl, writeMapUrl } from '@/lib/mapUrl'
-import { loadTerrain } from '@/lib/globe'
+import { MAX_ZOOM, MIN_ZOOM, loadTerrain } from '@/lib/globe'
 import { CHOKEPOINTS } from '@/lib/chokepoints'
 import type { Layer } from '@/components/LayerTabs'
 import type { ChokepointReading } from '@/lib/shipping'
@@ -55,7 +55,7 @@ import {
   highlightCorridor,
   paintHub,
 } from '@/lib/airspaceLayer'
-import { type GlobeMarker, type GlobeView, createGlobeView } from '@/lib/globeView'
+import { ZOOM_STEP, type GlobeMarker, type GlobeView, createGlobeView } from '@/lib/globeView'
 import { COUNTRIES } from '@/lib/countries'
 import { SEGMENTS, type Segment } from '@/lib/segments'
 // Type-only: erased at compile time, so the news pipeline never reaches the client bundle.
@@ -386,6 +386,13 @@ function paint(els: MarkerEls, entry: PulseEntry | null, announce = false) {
 export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
   const [tilesIn, setTilesIn] = useState(false)
   const [view, setView] = useState<'map' | 'globe'>('map')
+  /**
+   * Mirrored out of the globe only so the two buttons can grey out at the
+   * stops. The camera itself lives in `globeView` and is driven by the wheel
+   * as well, so this is a readout rather than the source — and it is read
+   * back after every button press and while a wheel gesture is settling.
+   */
+  const [globeZoom, setGlobeZoom] = useState(MIN_ZOOM)
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
   const markersRef = useRef<Map<string, MarkerEls>>(new Map())
@@ -893,6 +900,7 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       terrain,
       fit: size.fit,
       markers: new Map(markersRef.current),
+      onZoom: setGlobeZoom,
       // Read through the ref rather than captured, so switching layers does
       // not mean rebuilding the globe.
       drawOverlay: (ctx, project, radius) => {
@@ -1456,15 +1464,36 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
       }
     }
 
-    pull()
-    const timer = window.setInterval(pull, 45_000)
+    /**
+     * Normally every 45 seconds, which is how long one answer is served for.
+     *
+     * But a cold instance answers from a deliberately short first capture and
+     * then deepens the pool behind that response, so the first answer of a
+     * session is the thinnest there will be. Waiting the full 45 seconds to
+     * collect the deepened pool left the sea looking emptier than it really
+     * was for most of a minute. While the fleet is sparse, ask again sooner;
+     * once it is a real fleet this settles back onto the slow clock.
+     */
+    const SPARSE_FLEET = 40
+    const ASK_SOON = 12_000
+    const ASK_STEADY = 45_000
+    let timer = 0
+    const schedule = () => {
+      const thin = vesselsRef.current.length < SPARSE_FLEET
+      timer = window.setTimeout(() => {
+        void pull().then(() => { if (!cancelled) schedule() })
+      }, thin ? ASK_SOON : ASK_STEADY)
+    }
+
+    void pull().then(() => { if (!cancelled) schedule() })
+
     // The globe redraws on its own clock; the flat map only redraws when the
     // map itself changes, so without this the fleet would sit still between
     // captures however carefully it was being carried forward.
     const motion = window.setInterval(() => {
       if (viewRef.current === 'map') vesselOverlayRef.current?.redraw()
     }, 500)
-    return () => { cancelled = true; window.clearInterval(timer); window.clearInterval(motion) }
+    return () => { cancelled = true; window.clearTimeout(timer); window.clearInterval(motion) }
   }, [layer])
 
   /**
@@ -1787,6 +1816,52 @@ export default function WorldMap({ layer = 'news' }: { layer?: Layer }) {
         >
           <MapIcon size={17} strokeWidth={1.9} aria-hidden />
           <span>Map</span>
+        </button>
+      </div>
+      )}
+
+      {/* ── GLOBE ZOOM ──
+          The flat map has had Google's +/- from the start; the globe had no
+          zoom at all, which made the two views feel like different products
+          rather than two renderings of one. Wheel, pinch and double-click all
+          work on the sphere now, but none of those is discoverable and none
+          of them exists on a touch device without a trackpad, so the control
+          is drawn as well.
+
+          Placed where Google puts its own pair, so the thing you reach for
+          does not move when you switch projection. Only on the globe: the
+          flat map already has a working pair four pixels away, and two sets
+          of zoom buttons on one map is a bug report waiting to happen. */}
+      {view === 'globe' && (
+      <div
+        className="globe-zoom"
+        role="group"
+        aria-label="Globe zoom"
+        style={{
+          position: 'absolute', zIndex: 210,
+          right: isCompact ? '16px' : 'calc(24px + var(--safe-right))',
+          bottom: isCompact
+            ? 'calc(156px + var(--safe-bottom))'
+            : 'calc(96px + var(--safe-bottom))',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => { globeRef.current?.zoomBy(ZOOM_STEP); setGlobeZoom(globeRef.current?.zoomLevel() ?? 1) }}
+          disabled={globeZoom >= MAX_ZOOM - 0.001}
+          aria-label="Zoom in"
+          title="Zoom in — or scroll on the globe"
+        >
+          <Plus size={16} strokeWidth={2.4} aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={() => { globeRef.current?.zoomBy(-ZOOM_STEP); setGlobeZoom(globeRef.current?.zoomLevel() ?? 1) }}
+          disabled={globeZoom <= MIN_ZOOM + 0.001}
+          aria-label="Zoom out"
+          title="Zoom out"
+        >
+          <Minus size={16} strokeWidth={2.4} aria-hidden />
         </button>
       </div>
       )}
