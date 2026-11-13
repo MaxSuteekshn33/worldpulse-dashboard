@@ -635,12 +635,22 @@ button:active, [role="button"]:active { opacity: .85; }
   box-shadow: 0 10px 28px rgba(0, 0, 0, .45);
 }
 
+/**
+ * 44 square, which is the smallest a finger should be asked to hit.
+ *
+ * These shipped at 38x34 and that was wrong twice over: under the 44px floor
+ * every touch guideline agrees on, and visibly meaner than the `.view-switch`
+ * pair at 56x49 sitting on the opposite side of the same canvas. Measured on
+ * a 390px viewport, which is where it matters — the globe is the view you are
+ * most likely to be poking at on a phone, since there is no pinch-to-zoom
+ * fallback from the map underneath it.
+ */
 .globe-zoom button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border: 0;
   border-radius: 11px;
   background: transparent;
