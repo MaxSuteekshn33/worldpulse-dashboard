@@ -108,6 +108,7 @@ export default async function CountryPage(
         }}>
           <Link
             href="/dashboard"
+            className="tap-44"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '8px',
               padding: '8px 13px', borderRadius: '9px',
@@ -215,7 +216,7 @@ export default async function CountryPage(
               }} />
               <Link
                 href={`/country/${country.code}/${meta.id}`}
-                className="section-title"
+                className="section-title tap-44"
                 style={{ textDecoration: 'none' }}
               >
                 <h2 className="heading-md">{meta.label}</h2>
@@ -226,6 +227,7 @@ export default async function CountryPage(
               {articles.length > PREVIEW && (
                 <Link
                   href={`/country/${country.code}/${meta.id}`}
+                  className="tap-44"
                   style={{
                     marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px',
                     padding: '7px 13px', borderRadius: '999px',
@@ -283,6 +285,7 @@ export default async function CountryPage(
           </span>
           <Link
             href="/dashboard"
+            className="tap-44"
             style={{
               marginLeft: 'auto', fontSize: '13px', fontWeight: 600,
               color: 'var(--accent-bright)', textDecoration: 'none',

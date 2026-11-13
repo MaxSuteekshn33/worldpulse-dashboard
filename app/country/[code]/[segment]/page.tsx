@@ -71,6 +71,7 @@ export default async function SegmentPage({ params }: { params: Params }) {
         }}>
           <Link
             href={`/country/${country.code}`}
+            className="tap-44"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '8px',
               padding: '8px 13px', borderRadius: '9px',
@@ -146,6 +147,7 @@ export default async function SegmentPage({ params }: { params: Params }) {
                 key={s.id}
                 href={`/country/${country.code}/${s.id}`}
                 aria-current={active ? 'page' : undefined}
+                className="tap-44"
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '7px',
                   padding: '8px 13px', borderRadius: '999px', whiteSpace: 'nowrap',
@@ -210,6 +212,7 @@ export default async function SegmentPage({ params }: { params: Params }) {
           </span>
           <Link
             href={`/country/${country.code}`}
+            className="tap-44"
             style={{
               marginLeft: 'auto', fontSize: '13px', fontWeight: 600,
               color: 'var(--accent-bright)', textDecoration: 'none',

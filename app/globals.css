@@ -332,6 +332,35 @@ button:active, [role="button"]:active { opacity: .85; }
 .section-title h2 { transition: color .18s ease; }
 .section-title:hover h2 { color: var(--accent-bright); }
 
+/**
+ * Brings a short control up to the 44px a finger needs, without moving it.
+ *
+ * Measured on a phone, these are all wide enough and only short: "See all 40"
+ * is 109x36, the Map button 78x38, a section title 98x24, and the footer's
+ * back link 130x20. Making them genuinely taller would push the rows they sit
+ * in around on every screen size — and these are type-led controls whose size
+ * IS the design — for a problem that only exists under a thumb. So the
+ * visible box is left exactly as it is and an invisible one is centred on it.
+ *
+ * Only `left/right: 0`, so the area never grows sideways into a neighbour;
+ * every one of these is already wider than 44. The vertical growth is at most
+ * 12px either way and lands in margins these rows already have.
+ *
+ * `pointer: coarse` so a mouse keeps the tight hit box it has always had.
+ */
+@media (pointer: coarse) {
+  .tap-44 { position: relative; }
+  .tap-44::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 44px;
+    transform: translateY(-50%);
+  }
+}
+
 /* ---- The country opening sequence ----
  *
  * One timeline, 3.0s, the same for every country, and the caller holds the
